@@ -1,0 +1,295 @@
+gagawa ako ng website laravel tapos mysql ang database
+
+database name: bagsakan_db
+
+then ito yung mga features ng system tapos gusto ko MVC siya like kung may admin sa controller views ganto ang format
+
+controller
+admin/AdminDashboardController.php etc... hindi mag kakasama lang sa isang file ang functions para hindi makalat
+staff/StaffDashboardController.php etc...
+
+views
+admin/dashboard/index.blade.php etc...
+staff/dashboard/index.blade.php etc...
+
+then sa middleware same lang din magkakahiwalay ng route kada role para hindi magulo then what i want change also the config/app time to Asia/Manila
+
+then about sa mga error or validation gusto ko kapag naka forms ng modal mag eerror hindi mag coclose ung modal matrigger yung error dun sa forms, para hindi na mahirapan ang gagamit na user
+then kapag success show toast alert kung anong color pallete ng system ganun din gusto ko toast alert maclose na modal tapos toast alert na success
+
+tapos gusto ko kapag may image upload automatically validate ang size para hindi sobrang laki tapos store lahat ng images sa public hindi naka storage:link
+tapos gusto ko kapag may input na dropdown insertan mo ng select2 js para hindi mahirap mag search
+tapos gusto ko mag integrate ka din ng datatable kapag sa mga tables para hindi makalat tignan yung table
+then ang pinakamahalaga yung responsiveness ng system sa all devices like kapag mobile medyo liliit yung mga text para maganda tignan gandahan mo yung dashboard familar ka ba sa shadcn medyo gusto ko ganun yung hawig para simple lang
+
+tapos about sa collor pallete ng system ganto
+
+/* ==========================================================================
+   Worthy Acosta - Custom UI Dashboard & Auth Stylesheet
+   Brand Colors:
+   - Deep Navy:    #102A4E
+   - Primary Blue: #075998
+   - Wave Cyan:    #51B8E5
+   - Mist Blue:    #E9F5FC
+   - White:        #FFFFFF
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+    --color-deep-navy: #102A4E;
+    --color-primary-blue: #075998;
+    --color-wave-cyan: #51B8E5;
+    --color-mist-blue: #E9F5FC;
+    --color-white: #FFFFFF;
+    
+    --sidebar-bg: #102A4E;
+    --sidebar-hover: rgba(255, 255, 255, 0.08);
+    --sidebar-active: #075998;
+    --sidebar-text: #D1E4F5;
+    --sidebar-text-muted: #8EAAC6;
+    
+    --body-bg: #F4F8FC;
+    --card-bg: #FFFFFF;
+    --card-border: #E2EEF8;
+    
+    --text-main: #0E2038;
+    --text-muted: #5C728A;
+    --text-light: #8CA0B4;
+    
+    --sidebar-width: 270px;
+    --header-height: 72px;
+    
+    --shadow-sm: 0 2px 8px rgba(16, 42, 78, 0.04);
+    --shadow-md: 0 6px 20px rgba(16, 42, 78, 0.06);
+    --shadow-lg: 0 12px 32px rgba(16, 42, 78, 0.10);
+    
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    --radius-xl: 24px;
+    
+    --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--body-bg);
+    color: var(--text-main);
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+then sa logo provided na din naman bali ilagay mo lang siya sa public tapos gusto ko naman sa login page simple lang highlight mo lang din yung logo tapos medyo gandahan mo lang din thankyou wala ng remember me
+
+
+then sa system features ito lahat ang gusto ko makita make sure na magagawa mo to lahat na functionalities bali ichecheck ko siya isa isa if okay na
+Bagsakan POS + Inventory | Developer Specification 1
+BAGSAKAN POS + INVENTORY SYSTEM
+Developer Flow & Functional Specification
+Prepared for Worthy Acosta | October 2, 2026
+Build a system for wholesale purchasing and retail selling. Maintain one SKU per product while
+supporting multiple suppliers, purchase costs, receiving batches, selling units, and changing
+selling prices.
+Core rule: Purchase cost and selling price are separate records. Admin can access financial
+information. Cashiers see selling prices and available stock only. Purchasing users can access
+buying costs while selling and profit information can be restricted.
+1. Overall system flow
+Supplier → Purchase order / purchase entry
+↓
+Receiving → Batch / lot with supplier and purchase cost
+↓
+Inventory → Stock quantity, location and movements
+↓
+Pricing → Authorized SRP setting / update
+↓
+POS sale → Checkout and stock deduction
+↓
+Payment or receivable → Sales, inventory and financial reports
+This document consolidates the requested system explanation. Amounts and transactions below
+are illustrative examples.
+Bagsakan POS + Inventory | Developer Specification 2
+2. Products, suppliers and purchase costs
+Product masterfile: SKU, product name, category, base inventory unit, purchase/selling units and
+conversion factors, current default SRP, low-stock threshold, and active status.
+Warehouse/location balances should be tracked separately.
+A product keeps one SKU across suppliers. Each receipt creates its own batch with supplier,
+receipt date, invoice/DR reference, quantity, unit cost and location. A new purchase must never
+overwrite historical costs.
+SKU: VEG-TOM-001 / Tomato Quantity Cost per kg Total cost
+Supplier A / Batch 001 100 kg ₱55 ₱5,500
+Supplier B / Batch 002 80 kg ₱60 ₱4,800
+Supplier C / Batch 003 50 kg ₱52 ₱2,600
+Total 230 kg - ₱12,900
+Cashier view: Tomato | Available: 230 kg | SRP: ₱90/kg. No supplier, buying cost, average cost,
+valuation or margin appears.
+3. Costing method
+Support FIFO or weighted average costing, with the chosen method controlled by Admin.
+Weighted average is a practical starting option for this specification. Keep supplier and batch
+costs even when average costing is used.
+Example: ₱12,900 ÷ 230 kg = ₱56.09/kg rounded average cost. At SRP ₱90/kg, estimated gross
+profit is ₱33.91/kg before expenses. Retain sufficient internal precision and round only displayed
+amounts.
+If all 230 kg sell at ₱90/kg: potential sales are ₱20,700 and potential gross profit is ₱7,800. These
+are projections, not completed sales or net profit.
+Use one consistent costing method for posted transactions. A method change needs a controlled
+transition; it must not silently rewrite historical results. Physical batch allocation and financial
+costing are separate concerns.
+Bagsakan POS + Inventory | Developer Specification 3
+4. User access and cost confidentiality
+Information / action Admin / Owner Purchasing / Inventory Cashier
+SKU and stock quantities Full Allowed Allowed
+Suppliers, buying costs and purchase
+history
+Full Allowed Denied
+SRP / selling information Full Optional restriction Allowed
+Profit, valuation and financial reports Full Denied by default Denied
+Receive goods / input buying costs Full Allowed Denied
+Change SRP / discounts Full Only if authorized Approval required
+Spoilage / stock adjustments Approve / post Submit; approve if
+authorized
+Denied by default
+Users and audit logs Full Restricted Restricted
+POS checkout / customer payment Full Only if authorized Allowed within
+assigned duties
+Admin / Owner: Manage purchasing, receiving, inventory, pricing, sales, expenses, receivables,
+supplier payables, cash/bank balances, financial reports, users and approvals.
+Purchasing / Inventory: See suppliers, purchase prices/history, quantities ordered/received and
+warehouse locations. Hide selling prices, profits, total sales, balances and company financial
+reports when configured by Admin.
+Cashier: Search/scan products, see SRP and available quantity, enter sale quantity, complete
+checkout and access permitted receipts. No purchase-price or profit access.
+Backend requirement: Enforce role and user permissions on every API, report, export and print
+route. Do not send sensitive cost data to restricted users and merely hide it on screen. Test
+direct requests and unauthorized record access.
+Permissions must be customizable per user. Audit information must also respect cost
+confidentiality. A person who knows both purchase and selling prices may calculate a margin
+themselves; permissions restrict system disclosure.
+Bagsakan POS + Inventory | Developer Specification 4
+5. Purchasing and receiving flow
+Select supplier and existing SKU
+↓
+Enter quantity, purchase unit and purchase price
+↓
+Record purchase date, invoice / DR number and payment terms
+↓
+Receive actual quantity into selected warehouse / location
+↓
+Create receiving batch and post inventory movement
+↓
+Increase available stock and update costing / supplier balance
+Example: ABC Vegetable Trading | DR 10558 | October 2, 2026 | Tomato: 150 kg × ₱58/kg =
+₱8,700. Confirmed receipt increases stock by 150 kg.
+Separate ordered quantity from received quantity. An order alone does not increase stock.
+Record partial receipts, shortages and purchase returns against their source documents.
+6. Wholesale purchases and retail units
+Use one base inventory unit with defined conversion factors. Support fractional kg for weighed
+products and reject invalid unit conversions.
+Eggs example Inventory effect / price
+Purchase 10 trays; 1 tray = 30 pcs Receive 300 pcs
+Sell 2 trays Deduct 60 pcs
+Sell 5 individual eggs Deduct 5 pcs; remaining stock = 235 pcs
+Example retail price choices 1 pc ₱8; 6 pcs ₱45; 12 pcs ₱85; 1 tray ₱190
+Store the unit, conversion factor and price used on each transaction so later changes do not alter
+existing documents.
+Bagsakan POS + Inventory | Developer Specification 5
+7. POS sales and flexible selling prices
+Log in → Search or scan product
+↓
+Enter quantity / selling unit → Display authorized SRP
+↓
+Add to cart → Apply approved discount or price override
+↓
+Checkout → Select payment method and customer if needed
+↓
+Post sale → Print / send receipt and deduct stock once
+Cashier screen: product name, SKU, available stock, SRP, quantity, approved discount and line
+total. Purchase data is excluded.
+Flexible pricing: Store a default SRP, but allow Admin or an authorized supervisor to update it or
+approve a transaction-specific override. Cashier overrides are disabled by default. Save the
+actual selling price on every sale line.
+Tomato selling-price history SRP per kg
+October 1 ₱85
+October 2 ₱90
+October 3 ₱95
+October 4 ₱88
+Keep purchase-cost history and selling-price history separately, including date/time, user,
+old/new values and reason. Historical prices must remain available to authorized users.
+8. Credit sales and collections
+Payment choices: cash, GCash, bank transfer, credit and mixed payment. A credit sale requires a
+customer, invoice, terms and due date. Cashiers receive only the customer-balance information
+explicitly authorized for checkout.
+Example: Sentro 88 Foods Inc. | SI-00158 | ₱15,800 | Invoice date October 3, 2026 | 30-day term
+| Due November 2, 2026. A ₱5,000 collection reduces the outstanding amount to ₱10,800.
+Allocate payments to invoices and record payment date/method/reference. A later collection
+increases cash/bank and reduces receivables; it does not create a second sale or deduct stock
+again.
+Bagsakan POS + Inventory | Developer Specification 6
+9. Spoilage, expenses and dashboards
+Spoilage / wastage: Record SKU, batch where applicable, warehouse, quantity, date, reason,
+optional photo, submitter and approver. Approved spoilage reduces stock and records the cost
+as a loss.
+Example: Tomato stock 100 kg; spoiled 8 kg due to overripeness; Admin approves; new stock 92
+kg. The 8 kg remains traceable as a loss.
+Expenses: Record category, date, amount, payee, payment method/account and supporting
+reference. Track expenses separately from product gross profit and supplier purchase balances.
+10. Admin dashboard and reports
+Illustrative dashboard metric Amount / count
+Sales / COGS / gross profit today ₱125,500 / ₱82,300 / ₱43,200
+Inventory value ₱450,000
+Receivables / supplier payables ₱185,000 / ₱120,000
+Low stock / out of stock 12 / 4 items
+Spoilage today ₱3,200
+Show top-selling products, low stock, highest gross-profit products, slow-moving products,
+spoilage and outstanding customer credits. Use actual sale prices and posted costs for realized
+gross profit. Net profit requires operating expenses and other applicable adjustments.
+Reports must support date, SKU, supplier, customer and warehouse filters. Include sales, COGS,
+gross profit, stock movements, inventory valuation, expenses, supplier purchases/payables and
+receivable aging. Exports follow the same role permissions.
+11. Supplier profiles
+Supplier fields: name, contact person, mobile number, address, TIN, payment terms, bank
+information, supplied products and outstanding balance. Reports should answer: “How much
+tomato did we buy from Supplier A this month?” and “Which products came from Supplier B
+between October 1 and 31?”
+Bagsakan POS + Inventory | Developer Specification 7
+12. Audit trail and recommended modules
+Trace all sensitive changes: pricing, inventory adjustments, spoilage approvals, discounts, voids,
+refunds, payments and role changes. Record user, timestamp, source record, before/after values
+and reason. Posted records should be reversed with linked entries rather than erased.
+Examples: Admin changed tomato SRP ₱90 → ₱95; Cashier 02 voided POS-1055 for ₱1,250 with
+approval; Inventory Staff submitted a -5 kg spoilage adjustment.
+Module Purpose
+Dashboard / POS Business overview; retail and wholesale checkout
+Products / Pricing SKU masterfile, units, SRP and price history
+Purchasing / Receiving Supplier orders, purchases and receipt batches
+Inventory / Spoilage Stock by location, movements, adjustments and losses
+Suppliers / Customers Contact records and transaction histories
+Credit / AR / Expenses Receivables, collections and business expenses
+Reports / Users / Audit trail Financial and inventory reports; permissions; traceability
+13. Database structure and acceptance checks
+Recommended records: Product; Supplier; Product-Supplier link; Purchase and PurchaseLine;
+Receipt and ReceiptLine/Batch; Warehouse; InventoryMovement; SellingPriceHistory; Sale and
+SaleLine; Payment and InvoiceAllocation; Expense; Adjustment; User/Role/Permission; AuditLog.
+Each purchase line points to one SKU and its purchase supplier. Each receiving batch links back
+to a receipt/purchase line. Sale lines retain the selling price, unit conversion and costing applied
+when posted.
+Developer acceptance checks:
+1. Three suppliers for one SKU retain all three costs and total stock.
+2. Purchasing users can be blocked from selling prices and profit.
+3. Cashier APIs, exports and printouts contain no purchase costs.
+4. Tray/pcs and fractional-kg sales deduct correct base quantities.
+5. Duplicate checkout/receipt requests cannot post twice; simultaneous sales cannot oversell.
+6. Price updates preserve existing invoice prices and history.
+7. Collections reduce AR without duplicating sales; spoilage and voids create traceable
+movements.
+Critical requirement: ONE SKU per product, MULTIPLE SUPPLIERS, MULTIPLE PURCHASE PRICES
+and MULTIPLE BATCHES. Protect buying costs, valuation and financial information through
+backend permissions.
