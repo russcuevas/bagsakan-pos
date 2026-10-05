@@ -8,17 +8,21 @@ use App\Http\Controllers\Admin\AdminInventoryController;
 use App\Http\Controllers\Admin\AdminPricingController;
 use App\Http\Controllers\Admin\AdminProductController;
 use App\Http\Controllers\Admin\AdminPurchaseController;
+use App\Http\Controllers\Admin\AdminPurchaseRequestController;
 use App\Http\Controllers\Admin\AdminReceivableController;
 use App\Http\Controllers\Admin\AdminReportController;
 use App\Http\Controllers\Admin\AdminSpoilageController;
 use App\Http\Controllers\Admin\AdminSupplierController;
 use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\AdminWarehouseController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Cashier\CashierPOSController;
 use App\Http\Controllers\Cashier\CashierSalesHistoryController;
+use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\Staff\StaffDashboardController;
 use App\Http\Controllers\Staff\StaffInventoryController;
 use App\Http\Controllers\Staff\StaffPurchaseController;
+use App\Http\Controllers\Staff\StaffPurchaseRequestController;
 use App\Http\Controllers\Staff\StaffReceivingController;
 use App\Http\Controllers\Staff\StaffSpoilageController;
 use Illuminate\Support\Facades\Route;
@@ -40,6 +44,16 @@ Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::put('/profile', [AuthController::class, 'updateProfile'])->name('profile.update')->middleware('auth');
 
+// Shared Quotation Routes (Print & Modal data accessible to all authenticated roles)
+Route::middleware(['auth'])->group(function () {
+    Route::get('/quotations/{quotation}/print', [QuotationController::class, 'print'])->name('quotations.print');
+    Route::get('/quotations/{quotation}', [QuotationController::class, 'show'])->name('quotations.show');
+    Route::post('/quotations', [QuotationController::class, 'store'])->name('quotations.store');
+    Route::put('/quotations/{quotation}/status', [QuotationController::class, 'updateStatus'])->name('quotations.status');
+    Route::post('/quotations/{quotation}/convert', [QuotationController::class, 'convertToSale'])->name('quotations.convert');
+    Route::delete('/quotations/{quotation}', [QuotationController::class, 'destroy'])->name('quotations.destroy');
+});
+
 /*
 |--------------------------------------------------------------------------
 | Admin Routes (Full System Control & Financial Visibility)
@@ -60,6 +74,22 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     // Pricing & SRP History
     Route::get('/pricing', [AdminPricingController::class, 'index'])->name('pricing.index');
     Route::post('/pricing/update', [AdminPricingController::class, 'updatePrice'])->name('pricing.update');
+
+    // Multiple Warehouses & Transfers
+    Route::get('/warehouses', [AdminWarehouseController::class, 'index'])->name('warehouses.index');
+    Route::post('/warehouses', [AdminWarehouseController::class, 'store'])->name('warehouses.store');
+    Route::put('/warehouses/{warehouse}', [AdminWarehouseController::class, 'update'])->name('warehouses.update');
+    Route::post('/warehouses/transfer', [AdminWarehouseController::class, 'transferStock'])->name('warehouses.transfer');
+
+    // Quotations Module
+    Route::get('/quotations', [QuotationController::class, 'index'])->name('quotations.index');
+
+    // Purchase Requests (PR Approval & Multi-Supplier PO Splitting)
+    Route::get('/purchase-requests', [AdminPurchaseRequestController::class, 'index'])->name('purchase-requests.index');
+    Route::post('/purchase-requests', [AdminPurchaseRequestController::class, 'store'])->name('purchase-requests.store');
+    Route::get('/purchase-requests/{purchaseRequest}', [AdminPurchaseRequestController::class, 'show'])->name('purchase-requests.show');
+    Route::post('/purchase-requests/{purchaseRequest}/review', [AdminPurchaseRequestController::class, 'review'])->name('purchase-requests.review');
+    Route::post('/purchase-requests/{purchaseRequest}/convert-to-pos', [AdminPurchaseRequestController::class, 'convertToPOs'])->name('purchase-requests.convert-to-pos');
 
     // Suppliers & AP
     Route::get('/suppliers', [AdminSupplierController::class, 'index'])->name('suppliers.index');
@@ -94,7 +124,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::get('/expenses', [AdminExpenseController::class, 'index'])->name('expenses.index');
     Route::post('/expenses', [AdminExpenseController::class, 'store'])->name('expenses.store');
 
-    // Accounts Receivable & Collections
+    // Accounts Receivable & Collections (with Tax / 2307 handling)
     Route::get('/receivables', [AdminReceivableController::class, 'index'])->name('receivables.index');
     Route::post('/receivables/collect', [AdminReceivableController::class, 'recordCollection'])->name('receivables.collect');
 
@@ -120,6 +150,14 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 */
 Route::middleware(['auth', 'role:purchasing,admin'])->prefix('staff')->name('staff.')->group(function () {
     Route::get('/dashboard', [StaffDashboardController::class, 'index'])->name('dashboard');
+
+    // Quotations Module for Staff/Purchaser
+    Route::get('/quotations', [QuotationController::class, 'index'])->name('quotations.index');
+
+    // Purchase Requests
+    Route::get('/purchase-requests', [StaffPurchaseRequestController::class, 'index'])->name('purchase-requests.index');
+    Route::post('/purchase-requests', [StaffPurchaseRequestController::class, 'store'])->name('purchase-requests.store');
+    Route::post('/purchase-requests/{purchaseRequest}/resubmit', [StaffPurchaseRequestController::class, 'resubmit'])->name('purchase-requests.resubmit');
 
     // Purchase Orders
     Route::get('/purchases', [StaffPurchaseController::class, 'index'])->name('purchases.index');
@@ -148,7 +186,11 @@ Route::middleware(['auth', 'role:cashier,admin'])->prefix('cashier')->name('cash
     Route::get('/pos/products', [CashierPOSController::class, 'searchProducts'])->name('pos.products');
     Route::post('/pos/checkout', [CashierPOSController::class, 'checkout'])->name('pos.checkout');
 
+    // Cashier Quotations list
+    Route::get('/quotations', [QuotationController::class, 'index'])->name('quotations.index');
+
     Route::get('/sales', [CashierSalesHistoryController::class, 'index'])->name('sales.index');
     Route::get('/sales/{sale}', [CashierSalesHistoryController::class, 'show'])->name('sales.show');
     Route::post('/sales/{sale}/void', [CashierSalesHistoryController::class, 'voidSale'])->name('sales.void');
 });
+

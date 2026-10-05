@@ -101,10 +101,14 @@
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;">
                     <div class="form-group">
                         <label class="form-label" for="cust_limit">Credit Limit (₱) <span class="text-danger">*</span></label>
                         <input type="number" step="0.01" id="cust_limit" name="credit_limit" class="form-control" value="0.00" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="cust_bal">Beginning Balance (₱)</label>
+                        <input type="number" step="0.01" id="cust_bal" name="current_balance" class="form-control" value="0.00" placeholder="0.00">
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="cust_terms">Payment Terms (Days) <span class="text-danger">*</span></label>
@@ -177,13 +181,17 @@
                             <input type="email" name="email" class="form-control" value="${c.email || ''}">
                         </div>
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;">
                         <div class="form-group">
                             <label class="form-label">Credit Limit (₱)</label>
                             <input type="number" step="0.01" name="credit_limit" class="form-control" value="${c.credit_limit}" required>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">Payment Terms (Days)</label>
+                            <label class="form-label">Current Balance (₱)</label>
+                            <input type="number" step="0.01" name="current_balance" class="form-control" value="${c.current_balance || '0.00'}" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Terms (Days)</label>
                             <input type="number" name="payment_terms_days" class="form-control" value="${c.payment_terms_days}" required>
                         </div>
                     </div>

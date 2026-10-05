@@ -41,6 +41,10 @@
                 <i class="bi bi-person-badge text-info me-1"></i> Cashier: <strong>{{ auth()->user()->name }}</strong> <i class="bi bi-pencil-fill ms-1" style="font-size: 0.65rem; opacity: 0.7;"></i>
             </div>
 
+            <a href="{{ route('cashier.quotations.index') }}" class="btn btn-sm btn-outline pos-header-btn" style="color: #2563eb; border-color: #93c5fd; background: #eff6ff;" title="Open Quotations">
+                <i class="bi bi-file-earmark-text"></i> <span class="d-none d-sm-inline">Quotations</span>
+            </a>
+
             <a href="{{ route('cashier.sales.index') }}" class="btn btn-sm btn-secondary pos-header-btn">
                 <i class="bi bi-clock-history"></i> <span class="d-none d-sm-inline">Today's Sales</span>
             </a>
@@ -139,6 +143,7 @@
 
     <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>

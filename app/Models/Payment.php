@@ -17,6 +17,9 @@ class Payment extends Model
         'payment_method',
         'reference_number',
         'amount',
+        'tax_withheld',
+        'tax_type',
+        'tax_doc_number',
         'notes',
         'received_by',
     ];
@@ -24,7 +27,13 @@ class Payment extends Model
     protected $casts = [
         'payment_date' => 'date',
         'amount' => 'decimal:2',
+        'tax_withheld' => 'decimal:2',
     ];
+
+    public function getTotalSettledAttribute(): float
+    {
+        return (float) ($this->amount + $this->tax_withheld);
+    }
 
     public function customer(): BelongsTo
     {

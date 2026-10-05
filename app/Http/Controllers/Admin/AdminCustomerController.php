@@ -25,8 +25,13 @@ class AdminCustomerController extends Controller
             'email' => 'nullable|email|max:255',
             'address' => 'nullable|string',
             'credit_limit' => 'required|numeric|min:0',
+            'current_balance' => 'nullable|numeric|min:0',
             'payment_terms_days' => 'required|integer|min:0',
         ]);
+
+        if (!isset($validated['current_balance'])) {
+            $validated['current_balance'] = 0;
+        }
 
         $customer = Customer::create($validated);
 
@@ -61,6 +66,7 @@ class AdminCustomerController extends Controller
             'email' => 'nullable|email|max:255',
             'address' => 'nullable|string',
             'credit_limit' => 'required|numeric|min:0',
+            'current_balance' => 'nullable|numeric|min:0',
             'payment_terms_days' => 'required|integer|min:0',
             'is_active' => 'required|boolean',
         ]);

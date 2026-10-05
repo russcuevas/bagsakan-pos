@@ -24,10 +24,22 @@ class AdminPurchaseController extends Controller
 
     public function index(Request $request)
     {
-        $query = Purchase::with(['supplier', 'warehouse', 'creator', 'lines.product']);
+        $relations = ['supplier', 'warehouse', 'creator', 'lines.product'];
+        if (method_exists(\App\Models\PurchaseLine::class, 'supplier')) {
+            $relations[] = 'lines.supplier';
+        }
+
+        $query = Purchase::with($relations);
 
         if ($request->filled('supplier_id')) {
-            $query->where('supplier_id', $request->supplier_id);
+            $query->where(function ($q) use ($request) {
+                $q->where('supplier_id', $request->supplier_id);
+                if (\Illuminate\Support\Facades\Schema::hasColumn('purchase_lines', 'supplier_id')) {
+                    $q->orWhereHas('lines', function ($lq) use ($request) {
+                        $lq->where('supplier_id', $request->supplier_id);
+                    });
+                }
+            });
         }
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -36,7 +48,7 @@ class AdminPurchaseController extends Controller
         $purchases = $query->latest('purchase_date')->get();
         $suppliers = Supplier::where('is_active', true)->get();
         $warehouses = Warehouse::where('is_active', true)->get();
-        $products = Product::with('units')->where('is_active', true)->get();
+        $products = Product::with(['units', 'suppliers'])->where('is_active', true)->get();
 
         return view('admin.purchases.index', compact('purchases', 'suppliers', 'warehouses', 'products'));
     }
@@ -44,7 +56,7 @@ class AdminPurchaseController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'supplier_id' => 'required|exists:suppliers,id',
+            'supplier_id' => 'nullable|exists:suppliers,id',
             'warehouse_id' => 'required|exists:warehouses,id',
             'purchase_date' => 'required|date',
             'invoice_dr_number' => 'nullable|string|max:100',
@@ -53,6 +65,7 @@ class AdminPurchaseController extends Controller
             'notes' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
+            'items.*.supplier_id' => 'nullable|exists:suppliers,id',
             'items.*.unit_name' => 'required|string',
             'items.*.conversion_factor' => 'required|numeric|min:0.0001',
             'items.*.quantity' => 'required|numeric|min:0.01',
@@ -67,9 +80,13 @@ class AdminPurchaseController extends Controller
                 $totalAmount += ($item['quantity'] * $item['unit_cost']);
             }
 
+            // If header supplier is not explicitly chosen, check if single supplier across all items
+            $lineSuppliers = collect($validated['items'])->pluck('supplier_id')->filter()->unique();
+            $headerSupplierId = $validated['supplier_id'] ?? ($lineSuppliers->count() === 1 ? $lineSuppliers->first() : null);
+
             $purchase = Purchase::create([
                 'purchase_number' => $purchaseNumber,
-                'supplier_id' => $validated['supplier_id'],
+                'supplier_id' => $headerSupplierId,
                 'warehouse_id' => $validated['warehouse_id'],
                 'invoice_dr_number' => $validated['invoice_dr_number'] ?? null,
                 'purchase_date' => $validated['purchase_date'],
@@ -89,10 +106,12 @@ class AdminPurchaseController extends Controller
                 $unitCost = (float) $item['unit_cost'];
                 $baseCost = $conversionFactor > 0 ? ($unitCost / $conversionFactor) : $unitCost;
                 $lineSubtotal = $item['quantity'] * $unitCost;
+                $lineSupplierId = $item['supplier_id'] ?? $headerSupplierId ?? null;
 
                 $line = PurchaseLine::create([
                     'purchase_id' => $purchase->id,
                     'product_id' => $item['product_id'],
+                    'supplier_id' => $lineSupplierId,
                     'unit_name' => $item['unit_name'],
                     'conversion_factor' => $conversionFactor,
                     'quantity_ordered' => $item['quantity'],
@@ -106,6 +125,7 @@ class AdminPurchaseController extends Controller
                     $receivingItems[] = [
                         'purchase_line_id' => $line->id,
                         'product_id' => $item['product_id'],
+                        'supplier_id' => $lineSupplierId,
                         'unit_name' => $item['unit_name'],
                         'conversion_factor' => $conversionFactor,
                         'quantity_received' => $item['quantity'],
@@ -131,6 +151,7 @@ class AdminPurchaseController extends Controller
                 'purchase_number' => $purchaseNumber,
                 'total_amount' => $totalAmount,
                 'supplier_id' => $purchase->supplier_id,
+                'is_multi_supplier' => $lineSuppliers->count() > 1,
                 'auto_receive' => !empty($validated['auto_receive']),
             ], 'Created Purchase Order / Inbound Purchase');
         });
@@ -147,7 +168,11 @@ class AdminPurchaseController extends Controller
 
     public function show(Purchase $purchase)
     {
-        $purchase->load(['supplier', 'warehouse', 'creator', 'lines.product', 'batches']);
+        $relations = ['supplier', 'warehouse', 'creator', 'lines.product', 'batches.supplier'];
+        if (method_exists(\App\Models\PurchaseLine::class, 'supplier')) {
+            $relations[] = 'lines.supplier';
+        }
+        $purchase->load($relations);
         return response()->json([
             'success' => true,
             'data' => $purchase,
@@ -175,6 +200,7 @@ class AdminPurchaseController extends Controller
                 $receivingItems[] = [
                     'purchase_line_id' => $line->id,
                     'product_id' => $line->product_id,
+                    'supplier_id' => $line->supplier_id ?? $purchase->supplier_id,
                     'unit_name' => $line->unit_name,
                     'conversion_factor' => $line->conversion_factor,
                     'quantity_received' => $itemData['quantity_received'],

@@ -58,23 +58,35 @@
                     </a>
                     <a href="{{ route('admin.inventory.index') }}" class="nav-item {{ request()->routeIs('admin.inventory.*') ? 'active' : '' }}">
                         <i class="bi bi-boxes"></i>
-                        <span>Warehouse Inventory</span>
+                        <span>Stock & Batch Ledger</span>
+                    </a>
+                    <a href="{{ route('admin.warehouses.index') }}" class="nav-item {{ request()->routeIs('admin.warehouses.*') ? 'active' : '' }}">
+                        <i class="bi bi-building"></i>
+                        <span>Warehouses & Transfers</span>
                     </a>
 
                     <div class="nav-section-title">Purchasing & Inbound</div>
+                    <a href="{{ route('admin.purchase-requests.index') }}" class="nav-item {{ request()->routeIs('admin.purchase-requests.*') ? 'active' : '' }}">
+                        <i class="bi bi-clipboard-check"></i>
+                        <span>Purchase Requests (PR)</span>
+                    </a>
                     <a href="{{ route('admin.purchases.index') }}" class="nav-item {{ request()->routeIs('admin.purchases.*') ? 'active' : '' }}">
                         <i class="bi bi-cart-check"></i>
-                        <span>Purchases & DR</span>
+                        <span>Purchase Orders (PO)</span>
                     </a>
                     <a href="{{ route('admin.suppliers.index') }}" class="nav-item {{ request()->routeIs('admin.suppliers.*') ? 'active' : '' }}">
                         <i class="bi bi-truck"></i>
                         <span>Suppliers & Payables</span>
                     </a>
 
-                    <div class="nav-section-title">Sales, AR & Finance</div>
+                    <div class="nav-section-title">Sales, Quotes & AR</div>
                     <a href="{{ route('cashier.pos') }}" class="nav-item" target="_blank">
                         <i class="bi bi-display"></i>
                         <span>Launch POS Terminal</span>
+                    </a>
+                    <a href="{{ route('admin.quotations.index') }}" class="nav-item {{ request()->routeIs('admin.quotations.*') ? 'active' : '' }}">
+                        <i class="bi bi-file-earmark-text"></i>
+                        <span>Customer Quotations</span>
                     </a>
                     <a href="{{ route('admin.customers.index') }}" class="nav-item {{ request()->routeIs('admin.customers.*') ? 'active' : '' }}">
                         <i class="bi bi-people"></i>
@@ -82,7 +94,7 @@
                     </a>
                     <a href="{{ route('admin.receivables.index') }}" class="nav-item {{ request()->routeIs('admin.receivables.*') ? 'active' : '' }}">
                         <i class="bi bi-cash-coin"></i>
-                        <span>Receivables & Collections</span>
+                        <span>Receivables & Tax Collections</span>
                     </a>
                     <a href="{{ route('admin.expenses.index') }}" class="nav-item {{ request()->routeIs('admin.expenses.*') ? 'active' : '' }}">
                         <i class="bi bi-receipt"></i>
@@ -124,6 +136,14 @@
                     <a href="{{ route('staff.dashboard') }}" class="nav-item {{ request()->routeIs('staff.dashboard') ? 'active' : '' }}">
                         <i class="bi bi-speedometer2"></i>
                         <span>Dashboard</span>
+                    </a>
+                    <a href="{{ route('staff.quotations.index') }}" class="nav-item {{ request()->routeIs('staff.quotations.*') ? 'active' : '' }}">
+                        <i class="bi bi-file-earmark-text"></i>
+                        <span>Customer Quotations</span>
+                    </a>
+                    <a href="{{ route('staff.purchase-requests.index') }}" class="nav-item {{ request()->routeIs('staff.purchase-requests.*') ? 'active' : '' }}">
+                        <i class="bi bi-clipboard-check"></i>
+                        <span>Purchase Requests (PR)</span>
                     </a>
                     <a href="{{ route('staff.purchases.index') }}" class="nav-item {{ request()->routeIs('staff.purchases.*') ? 'active' : '' }}">
                         <i class="bi bi-cart-plus"></i>
@@ -290,6 +310,7 @@
 
     <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>

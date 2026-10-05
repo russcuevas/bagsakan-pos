@@ -75,6 +75,11 @@ class Product extends Model
         return (float) $this->activeBatches()->sum('current_quantity');
     }
 
+    public function getStockInWarehouse(int $warehouseId): float
+    {
+        return (float) $this->activeBatches()->where('warehouse_id', $warehouseId)->sum('current_quantity');
+    }
+
     public function getImageUrlAttribute(): string
     {
         if ($this->image_path && file_exists(public_path($this->image_path))) {

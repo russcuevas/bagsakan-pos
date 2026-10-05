@@ -8,7 +8,7 @@
     <div class="card-header">
         <div>
             <h2 class="card-title">Purchases & Inbound Receipts</h2>
-            <p class="card-description">Track purchase orders, supplier delivery receipts (DR), and batch receiving</p>
+            <p class="card-description">Track purchase orders, multi-supplier POs, supplier delivery receipts (DR), and batch receiving</p>
         </div>
         <button type="button" class="btn btn-primary" onclick="openModal('addPurchaseModal')">
             <i class="bi bi-cart-plus me-1"></i> New Purchase Entry / PO
@@ -33,7 +33,15 @@
                     @foreach($purchases as $p)
                         <tr>
                             <td><strong>{{ $p->purchase_number }}</strong></td>
-                            <td>{{ $p->supplier->name ?? 'N/A' }}</td>
+                            <td>
+                                @if($p->is_multi_supplier)
+                                    <span class="badge badge-navy" title="{{ $p->supplier_display }}">
+                                        <i class="bi bi-people-fill me-1"></i> Multi-Supplier ({{ $p->lines->pluck('supplier_id')->filter()->unique()->count() }})
+                                    </span>
+                                @else
+                                    <span style="font-weight: 600;">{{ $p->supplier->name ?? (method_exists($p->lines->first() ?? null, 'supplier') ? $p->lines->first()?->supplier?->name : 'N/A') }}</span>
+                                @endif
+                            </td>
                             <td>{{ $p->invoice_dr_number ?? 'Pending DR' }}</td>
                             <td>{{ $p->warehouse->name ?? 'Main' }}</td>
                             <td style="font-size: 0.8rem; color: var(--text-light);">{{ $p->purchase_date->format('M d, Y') }}</td>
@@ -71,7 +79,7 @@
 <div id="addPurchaseModal" class="modal-overlay">
     <div class="modal-dialog modal-xl">
         <div class="modal-header">
-            <h3 class="modal-title"><i class="bi bi-cart-plus text-primary me-2"></i> Create Inbound Purchase Order / Delivery Receipt</h3>
+            <h3 class="modal-title"><i class="bi bi-cart-plus text-primary me-2"></i> Create Inbound Purchase Order (Single or Multi-Supplier)</h3>
             <button type="button" class="modal-close-btn" data-close-modal="addPurchaseModal"><i class="bi bi-x-lg"></i></button>
         </div>
         <form action="{{ route('admin.purchases.store') }}" method="POST" class="ajax-form">
@@ -79,11 +87,11 @@
             <div class="modal-body">
                 <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                     <div class="form-group">
-                        <label class="form-label" for="po_sup">Supplier <span class="text-danger">*</span></label>
-                        <select id="po_sup" name="supplier_id" class="form-select select2-init" required>
-                            <option value="">Select Supplier</option>
+                        <label class="form-label" for="po_sup">Primary / Default Supplier <span style="font-size: 0.75rem; color: var(--text-muted);">(Optional / Applies to rows)</span></label>
+                        <select id="po_sup" name="supplier_id" class="form-select select2-init" onchange="syncHeaderSupplier(this.value)">
+                            <option value="">-- Multi-Supplier (Select Per Line Item) --</option>
                             @foreach($suppliers as $s)
-                                <option value="{{ $s->id }}">{{ $s->name }} ({{ $s->payment_terms }})</option>
+                                <option value="{{ $s->id }}" data-terms="{{ $s->payment_terms }}">{{ $s->name }} ({{ $s->payment_terms }})</option>
                             @endforeach
                         </select>
                     </div>
@@ -116,7 +124,7 @@
                 <div style="margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <label class="form-label" style="margin-bottom: 0; font-size: 0.95rem;">
-                            <i class="bi bi-list-check text-primary me-1"></i> Line Items (SKU, Purchase Unit, Buying Cost)
+                            <i class="bi bi-list-check text-primary me-1"></i> Line Items (Supports Different Suppliers per Item)
                         </label>
                         <button type="button" class="btn btn-sm btn-outline" onclick="addPurchaseLineRow()">
                             <i class="bi bi-plus-lg me-1"></i> Add Item Line
@@ -126,12 +134,13 @@
                     <table class="custom-table" style="font-size: 0.84rem;">
                         <thead>
                             <tr>
-                                <th style="width: 35%;">Product SKU</th>
-                                <th style="width: 15%;">Purchase Unit</th>
-                                <th style="width: 15%;">Quantity</th>
-                                <th style="width: 15%;">Unit Cost (₱)</th>
-                                <th style="width: 15%;">Subtotal (₱)</th>
-                                <th style="width: 5%;"></th>
+                                <th style="width: 28%;">Product SKU</th>
+                                <th style="width: 22%;">Supplier <span class="text-primary">*</span></th>
+                                <th style="width: 14%;">Purchase Unit</th>
+                                <th style="width: 11%;">Quantity</th>
+                                <th style="width: 11%;">Unit Cost (₱)</th>
+                                <th style="width: 10%;">Subtotal (₱)</th>
+                                <th style="width: 4%;"></th>
                             </tr>
                         </thead>
                         <tbody id="poLineItemsBody">
@@ -139,7 +148,7 @@
                         </tbody>
                         <tfoot>
                             <tr>
-                                <td colspan="4" style="text-align: right; font-weight: 800; font-size: 1rem;">Total Order Amount:</td>
+                                <td colspan="5" style="text-align: right; font-weight: 800; font-size: 1rem;">Total Order Amount:</td>
                                 <td style="font-weight: 800; font-size: 1.1rem; color: var(--color-primary-blue);" id="poTotalAmountDisplay">₱0.00</td>
                                 <td></td>
                             </tr>
@@ -150,7 +159,7 @@
                 <div style="background: var(--color-mist-blue); border: 1.5px solid #d2eaf8; border-radius: var(--radius-sm); padding: 14px 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
                     <input type="checkbox" id="auto_receive" name="auto_receive" value="1" style="width: 18px; height: 18px; cursor: pointer;">
                     <label for="auto_receive" style="cursor: pointer; margin-bottom: 0; font-size: 0.88rem; font-weight: 600; color: var(--color-deep-navy);">
-                        Confirm and Post Goods Immediately to Warehouse Inventory (Generates batches & updates weighted average cost)
+                        Confirm and Post Goods Immediately to Warehouse Inventory (Generates supplier lots/batches & updates weighted average cost)
                     </label>
                 </div>
 
@@ -169,9 +178,9 @@
 
 <!-- Receive Goods Modal -->
 <div id="receiveGoodsModal" class="modal-overlay">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-header">
-            <h3 class="modal-title"><i class="bi bi-box-arrow-in-down text-success me-2"></i> Receive Inbound Delivery</h3>
+            <h3 class="modal-title"><i class="bi bi-box-arrow-in-down text-success me-2"></i> Receive Inbound Delivery (Multi-Supplier Lot Tracking)</h3>
             <button type="button" class="modal-close-btn" data-close-modal="receiveGoodsModal"><i class="bi bi-x-lg"></i></button>
         </div>
         <form id="receiveGoodsForm" method="POST" class="ajax-form">
@@ -189,7 +198,7 @@
 
 <!-- View Purchase Details Modal -->
 <div id="viewPurchaseModal" class="modal-overlay">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-header">
             <h3 class="modal-title" id="viewPoTitle"><i class="bi bi-file-earmark-text text-primary me-2"></i> Purchase Order Details</h3>
             <button type="button" class="modal-close-btn" data-close-modal="viewPurchaseModal"><i class="bi bi-x-lg"></i></button>
@@ -207,18 +216,42 @@
 @push('scripts')
 <script>
     const availableProducts = {!! json_encode($products) !!};
+    const availableSuppliers = {!! json_encode($suppliers) !!};
     let poLineIdx = 0;
+
+    function syncHeaderSupplier(supId) {
+        if (!supId) return;
+        const selectedSupplier = availableSuppliers.find(s => s.id == supId);
+        if (selectedSupplier && selectedSupplier.payment_terms) {
+            document.getElementById('po_terms').value = selectedSupplier.payment_terms;
+        }
+
+        // Update rows that have no supplier selected yet
+        document.querySelectorAll('[id^="poSup_"]').forEach(selectEl => {
+            if (!selectEl.value) {
+                selectEl.value = supId;
+            }
+        });
+    }
 
     function addPurchaseLineRow() {
         poLineIdx++;
         const tr = document.createElement('tr');
         tr.id = `poRow_${poLineIdx}`;
 
+        const headerSup = document.getElementById('po_sup')?.value || '';
+
         tr.innerHTML = `
             <td>
                 <select name="items[${poLineIdx}][product_id]" class="form-select form-select-sm" required onchange="onProductSelect(${poLineIdx}, this.value)">
                     <option value="">Select Product...</option>
                     ${availableProducts.map(p => `<option value="${p.id}">${p.sku} - ${p.name}</option>`).join('')}
+                </select>
+            </td>
+            <td>
+                <select id="poSup_${poLineIdx}" name="items[${poLineIdx}][supplier_id]" class="form-select form-select-sm" required>
+                    <option value="">Select Supplier...</option>
+                    ${availableSuppliers.map(s => `<option value="${s.id}" ${s.id == headerSup ? 'selected' : ''}>${s.name}</option>`).join('')}
                 </select>
             </td>
             <td>
@@ -266,6 +299,13 @@
             unitSelect.appendChild(opt);
             document.getElementById(`poFactor_${idx}`).value = 1;
         }
+
+        // Auto-select preferred supplier for this product if row supplier not set
+        const supSelect = document.getElementById(`poSup_${idx}`);
+        if (prod && prod.suppliers && prod.suppliers.length > 0 && (!supSelect.value || supSelect.value === '')) {
+            supSelect.value = prod.suppliers[0].id;
+        }
+
         calcPoRow(idx);
     }
 
@@ -305,10 +345,12 @@
                 document.getElementById('viewPoTitle').innerText = `Purchase Order ${p.purchase_number}`;
 
                 document.getElementById('viewPurchaseBody').innerHTML = `
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; background: var(--body-bg); padding: 14px; border-radius: var(--radius-sm); margin-bottom: 16px;">
+                    <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 16px; background: var(--body-bg); padding: 14px; border-radius: var(--radius-sm); margin-bottom: 16px;">
                         <div>
-                            <div style="font-size: 0.74rem; color: var(--text-light);">Supplier</div>
-                            <div style="font-weight: 700; color: var(--color-deep-navy);">${p.supplier ? p.supplier.name : 'N/A'}</div>
+                            <div style="font-size: 0.74rem; color: var(--text-light);">Supplier / Type</div>
+                            <div style="font-weight: 700; color: var(--color-deep-navy);">
+                                ${p.is_multi_supplier ? '<span class="badge badge-navy"><i class="bi bi-people-fill me-1"></i> Multi-Supplier PO</span>' : (p.supplier ? p.supplier.name : 'N/A')}
+                            </div>
                         </div>
                         <div>
                             <div style="font-size: 0.74rem; color: var(--text-light);">DR / Invoice #</div>
@@ -316,7 +358,7 @@
                         </div>
                         <div>
                             <div style="font-size: 0.74rem; color: var(--text-light);">Purchase Date</div>
-                            <div style="font-weight: 700;">${p.formatted_purchase_date || formatDateTime(p.created_at || p.purchase_date)}</div>
+                            <div style="font-weight: 700;">${p.formatted_purchase_date || p.purchase_date}</div>
                         </div>
                     </div>
 
@@ -325,6 +367,7 @@
                         <thead>
                             <tr>
                                 <th>Product</th>
+                                <th>Supplier</th>
                                 <th>Unit</th>
                                 <th>Qty Ordered</th>
                                 <th>Qty Received</th>
@@ -335,7 +378,12 @@
                         <tbody>
                             ${p.lines.map(l => `
                                 <tr>
-                                    <td><strong>${l.product ? l.product.name : 'N/A'}</strong> (${l.product ? l.product.sku : ''})</td>
+                                    <td><strong>${l.product ? l.product.name : 'N/A'}</strong> <span style="font-size: 0.75rem; color: var(--text-muted);">(${l.product ? l.product.sku : ''})</span></td>
+                                    <td>
+                                        <span class="badge badge-navy" style="font-size: 0.78rem;">
+                                            <i class="bi bi-truck me-1"></i>${l.supplier ? l.supplier.name : (p.supplier ? p.supplier.name : 'N/A')}
+                                        </span>
+                                    </td>
                                     <td>${l.unit_name}</td>
                                     <td>${parseFloat(l.quantity_ordered).toFixed(2)}</td>
                                     <td><span class="badge ${parseFloat(l.quantity_received) >= parseFloat(l.quantity_ordered) ? 'badge-success' : 'badge-warning'}">${parseFloat(l.quantity_received).toFixed(2)}</span></td>
@@ -346,7 +394,7 @@
                         </tbody>
                         <tfoot>
                             <tr>
-                                <td colspan="5" style="text-align: right; font-weight: 800;">Total:</td>
+                                <td colspan="6" style="text-align: right; font-weight: 800;">Total:</td>
                                 <td style="font-weight: 800; font-size: 1.05rem; color: var(--color-primary-blue);">₱${parseFloat(p.total_amount).toFixed(2)}</td>
                             </tr>
                         </tfoot>
@@ -366,8 +414,8 @@
                 const p = res.data;
                 document.getElementById('receiveGoodsBody').innerHTML = `
                     <div style="background: var(--color-mist-blue); padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 16px;">
-                        <div style="font-weight: 700; color: var(--color-deep-navy);">Receiving for PO: ${p.purchase_number} (${p.supplier ? p.supplier.name : ''})</div>
-                        <div style="font-size: 0.8rem; color: var(--text-muted);">Confirm actual quantities delivered into ${p.warehouse ? p.warehouse.name : 'Warehouse'}</div>
+                        <div style="font-weight: 700; color: var(--color-deep-navy);">Receiving for PO: ${p.purchase_number} ${p.is_multi_supplier ? '(Multi-Supplier)' : (p.supplier ? '(' + p.supplier.name + ')' : '')}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">Confirm actual quantities delivered into ${p.warehouse ? p.warehouse.name : 'Warehouse'}. Inventory batches will be created per line item supplier.</div>
                     </div>
 
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
@@ -381,11 +429,12 @@
                         </div>
                     </div>
 
-                    <h4 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 8px;">Line Quantities Received</h4>
+                    <h4 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 8px;">Line Quantities Received by Supplier</h4>
                     <table class="custom-table" style="font-size: 0.84rem;">
                         <thead>
                             <tr>
                                 <th>Product SKU</th>
+                                <th>Supplier Lot Source</th>
                                 <th>Unit</th>
                                 <th>Ordered</th>
                                 <th>Actual Quantity to Receive</th>
@@ -397,6 +446,11 @@
                                     <td>
                                         <strong>${l.product ? l.product.name : 'N/A'}</strong>
                                         <input type="hidden" name="items[${i}][line_id]" value="${l.id}">
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-navy" style="font-size: 0.78rem;">
+                                            <i class="bi bi-truck me-1"></i>${l.supplier ? l.supplier.name : (p.supplier ? p.supplier.name : 'General')}
+                                        </span>
                                     </td>
                                     <td><span class="badge badge-navy">${l.unit_name}</span></td>
                                     <td>${parseFloat(l.quantity_ordered).toFixed(2)}</td>

@@ -10,6 +10,7 @@ class Purchase extends Model
 {
     protected $fillable = [
         'purchase_number',
+        'purchase_request_id',
         'supplier_id',
         'warehouse_id',
         'invoice_dr_number',
@@ -32,6 +33,8 @@ class Purchase extends Model
     protected $appends = [
         'formatted_purchase_date',
         'formatted_created_at',
+        'supplier_display',
+        'is_multi_supplier',
     ];
 
     public function getFormattedPurchaseDateAttribute(): string
@@ -44,6 +47,37 @@ class Purchase extends Model
     public function getFormattedCreatedAtAttribute(): string
     {
         return $this->created_at ? $this->created_at->format('Y-m-d / h:i A') : 'N/A';
+    }
+
+    public function getSupplierDisplayAttribute(): string
+    {
+        if ($this->relationLoaded('lines') && $this->lines->isNotEmpty()) {
+            $suppliers = $this->lines->map(fn($line) => method_exists($line, 'supplier') ? $line->supplier?->name : null)->filter()->unique()->values();
+            if ($suppliers->count() > 1) {
+                return $suppliers->implode(', ');
+            } elseif ($suppliers->count() === 1) {
+                return $suppliers->first();
+            }
+        }
+
+        if ($this->supplier) {
+            return $this->supplier->name;
+        }
+
+        return 'Multiple / General';
+    }
+
+    public function getIsMultiSupplierAttribute(): bool
+    {
+        if ($this->relationLoaded('lines') && $this->lines->isNotEmpty()) {
+            return $this->lines->pluck('supplier_id')->filter()->unique()->count() > 1;
+        }
+        return false;
+    }
+
+    public function purchaseRequest(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseRequest::class);
     }
 
     public function supplier(): BelongsTo

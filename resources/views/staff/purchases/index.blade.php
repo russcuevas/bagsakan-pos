@@ -8,7 +8,7 @@
     <div class="card-header">
         <div>
             <h2 class="card-title">Purchase Orders List</h2>
-            <p class="card-description">Create and view purchasing orders for farm suppliers</p>
+            <p class="card-description">Create and view purchasing orders for farm suppliers (Supports Single or Multi-Supplier POs)</p>
         </div>
         <button type="button" class="btn btn-primary" onclick="openModal('addStaffPurchaseModal')">
             <i class="bi bi-cart-plus me-1"></i> Create Purchase Order
@@ -32,7 +32,15 @@
                     @foreach($purchases as $p)
                         <tr>
                             <td><strong>{{ $p->purchase_number }}</strong></td>
-                            <td>{{ $p->supplier->name ?? 'N/A' }}</td>
+                            <td>
+                                @if($p->is_multi_supplier)
+                                    <span class="badge badge-navy" title="{{ $p->supplier_display }}">
+                                        <i class="bi bi-people-fill me-1"></i> Multi-Supplier ({{ $p->lines->pluck('supplier_id')->filter()->unique()->count() }})
+                                    </span>
+                                @else
+                                    <span style="font-weight: 600;">{{ $p->supplier->name ?? (method_exists($p->lines->first() ?? null, 'supplier') ? $p->lines->first()?->supplier?->name : 'N/A') }}</span>
+                                @endif
+                            </td>
                             <td>{{ $p->invoice_dr_number ?? 'Pending Delivery' }}</td>
                             <td style="font-size: 0.8rem; color: var(--text-light);">{{ $p->purchase_date->format('M d, Y') }}</td>
                             <td style="font-weight: 800; color: var(--color-deep-navy);">₱{{ number_format($p->total_amount, 2) }}</td>
@@ -70,11 +78,11 @@
             <div class="modal-body">
                 <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                     <div class="form-group">
-                        <label class="form-label" for="sp_sup">Supplier <span class="text-danger">*</span></label>
-                        <select id="sp_sup" name="supplier_id" class="form-select select2-init" required>
-                            <option value="">Select Supplier</option>
+                        <label class="form-label" for="sp_sup">Primary / Default Supplier <span style="font-size: 0.75rem; color: var(--text-muted);">(Optional / Applies to rows)</span></label>
+                        <select id="sp_sup" name="supplier_id" class="form-select select2-init" onchange="syncStaffHeaderSupplier(this.value)">
+                            <option value="">-- Multi-Supplier (Select Per Item) --</option>
                             @foreach($suppliers as $s)
-                                <option value="{{ $s->id }}">{{ $s->name }} ({{ $s->payment_terms }})</option>
+                                <option value="{{ $s->id }}" data-terms="{{ $s->payment_terms }}">{{ $s->name }} ({{ $s->payment_terms }})</option>
                             @endforeach
                         </select>
                     </div>
@@ -107,7 +115,7 @@
                 <div style="margin-bottom: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <label class="form-label" style="margin-bottom: 0; font-size: 0.95rem;">
-                            <i class="bi bi-list-check text-primary me-1"></i> Line Items (SKU, Purchase Unit, Buying Cost)
+                            <i class="bi bi-list-check text-primary me-1"></i> Line Items (Supports Different Suppliers per Item)
                         </label>
                         <button type="button" class="btn btn-sm btn-outline" onclick="addStaffPurchaseLineRow()">
                             <i class="bi bi-plus-lg me-1"></i> Add Item Line
@@ -117,19 +125,20 @@
                     <table class="custom-table" style="font-size: 0.84rem;">
                         <thead>
                             <tr>
-                                <th style="width: 35%;">Product SKU</th>
-                                <th style="width: 15%;">Purchase Unit</th>
-                                <th style="width: 15%;">Quantity</th>
-                                <th style="width: 15%;">Unit Cost (₱)</th>
-                                <th style="width: 15%;">Subtotal (₱)</th>
-                                <th style="width: 5%;"></th>
+                                <th style="width: 28%;">Product SKU</th>
+                                <th style="width: 22%;">Supplier <span class="text-primary">*</span></th>
+                                <th style="width: 14%;">Purchase Unit</th>
+                                <th style="width: 11%;">Quantity</th>
+                                <th style="width: 11%;">Unit Cost (₱)</th>
+                                <th style="width: 10%;">Subtotal (₱)</th>
+                                <th style="width: 4%;"></th>
                             </tr>
                         </thead>
                         <tbody id="spLineItemsBody">
                         </tbody>
                         <tfoot>
                             <tr>
-                                <td colspan="4" style="text-align: right; font-weight: 800; font-size: 1rem;">Total Order Amount:</td>
+                                <td colspan="5" style="text-align: right; font-weight: 800; font-size: 1rem;">Total Order Amount:</td>
                                 <td style="font-weight: 800; font-size: 1.1rem; color: var(--color-primary-blue);" id="spTotalAmountDisplay">₱0.00</td>
                                 <td></td>
                             </tr>
@@ -152,7 +161,7 @@
 
 <!-- View Modal -->
 <div id="viewStaffPoModal" class="modal-overlay">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-header">
             <h3 class="modal-title" id="viewStaffPoTitle"><i class="bi bi-file-earmark-text text-primary me-2"></i> Purchase Order</h3>
             <button type="button" class="modal-close-btn" data-close-modal="viewStaffPoModal"><i class="bi bi-x-lg"></i></button>
@@ -170,18 +179,41 @@
 @push('scripts')
 <script>
     const prodList = {!! json_encode($products) !!};
+    const supList = {!! json_encode($suppliers) !!};
     let sIdx = 0;
+
+    function syncStaffHeaderSupplier(supId) {
+        if (!supId) return;
+        const selectedSupplier = supList.find(s => s.id == supId);
+        if (selectedSupplier && selectedSupplier.payment_terms) {
+            document.getElementById('sp_terms').value = selectedSupplier.payment_terms;
+        }
+
+        document.querySelectorAll('[id^="spSup_"]').forEach(selectEl => {
+            if (!selectEl.value) {
+                selectEl.value = supId;
+            }
+        });
+    }
 
     function addStaffPurchaseLineRow() {
         sIdx++;
         const tr = document.createElement('tr');
         tr.id = `spRow_${sIdx}`;
 
+        const headerSup = document.getElementById('sp_sup')?.value || '';
+
         tr.innerHTML = `
             <td>
                 <select name="items[${sIdx}][product_id]" class="form-select form-select-sm" required onchange="onStaffProductSelect(${sIdx}, this.value)">
                     <option value="">Select Product...</option>
                     ${prodList.map(p => `<option value="${p.id}">${p.sku} - ${p.name}</option>`).join('')}
+                </select>
+            </td>
+            <td>
+                <select id="spSup_${sIdx}" name="items[${sIdx}][supplier_id]" class="form-select form-select-sm" required>
+                    <option value="">Select Supplier...</option>
+                    ${supList.map(s => `<option value="${s.id}" ${s.id == headerSup ? 'selected' : ''}>${s.name}</option>`).join('')}
                 </select>
             </td>
             <td>
@@ -229,6 +261,12 @@
             unitSelect.appendChild(opt);
             document.getElementById(`spFactor_${idx}`).value = 1;
         }
+
+        const supSelect = document.getElementById(`spSup_${idx}`);
+        if (prod && prod.suppliers && prod.suppliers.length > 0 && (!supSelect.value || supSelect.value === '')) {
+            supSelect.value = prod.suppliers[0].id;
+        }
+
         calcStaffPoRow(idx);
     }
 
@@ -268,13 +306,14 @@
                 document.getElementById('viewStaffPoTitle').innerText = `PO #${p.purchase_number}`;
                 document.getElementById('viewStaffPoBody').innerHTML = `
                     <div style="background: var(--body-bg); padding: 14px; border-radius: var(--radius-sm); margin-bottom: 16px;">
-                        <div>Supplier: <strong>${p.supplier ? p.supplier.name : 'N/A'}</strong></div>
-                        <div>Date: <strong>${p.formatted_purchase_date || formatDateTime(p.created_at || p.purchase_date)}</strong> | DR: <strong>${p.invoice_dr_number || 'Pending'}</strong></div>
+                        <div>Supplier: <strong>${p.is_multi_supplier ? '<span class="badge badge-navy"><i class="bi bi-people-fill me-1"></i> Multi-Supplier PO</span>' : (p.supplier ? p.supplier.name : 'N/A')}</strong></div>
+                        <div>Date: <strong>${p.formatted_purchase_date || p.purchase_date}</strong> | DR: <strong>${p.invoice_dr_number || 'Pending'}</strong></div>
                     </div>
                     <table class="custom-table" style="font-size: 0.84rem;">
                         <thead>
                             <tr>
                                 <th>Product</th>
+                                <th>Supplier</th>
                                 <th>Unit</th>
                                 <th>Qty Ordered</th>
                                 <th>Unit Cost</th>
@@ -284,14 +323,25 @@
                         <tbody>
                             ${p.lines.map(l => `
                                 <tr>
-                                    <td>${l.product ? l.product.name : 'N/A'}</td>
+                                    <td><strong>${l.product ? l.product.name : 'N/A'}</strong> <span style="font-size: 0.75rem; color: var(--text-muted);">(${l.product ? l.product.sku : ''})</span></td>
+                                    <td>
+                                        <span class="badge badge-navy" style="font-size: 0.78rem;">
+                                            <i class="bi bi-truck me-1"></i>${l.supplier ? l.supplier.name : (p.supplier ? p.supplier.name : 'N/A')}
+                                        </span>
+                                    </td>
                                     <td>${l.unit_name}</td>
                                     <td>${parseFloat(l.quantity_ordered).toFixed(2)}</td>
                                     <td>₱${parseFloat(l.unit_cost).toFixed(2)}</td>
-                                    <td>₱${parseFloat(l.subtotal).toFixed(2)}</td>
+                                    <td style="font-weight: 700;">₱${parseFloat(l.subtotal).toFixed(2)}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="5" style="text-align: right; font-weight: 800;">Total:</td>
+                                <td style="font-weight: 800; font-size: 1.05rem; color: var(--color-primary-blue);">₱${parseFloat(p.total_amount).toFixed(2)}</td>
+                            </tr>
+                        </tfoot>
                     </table>
                 `;
             });

@@ -59,6 +59,7 @@ class StaffReceivingController extends Controller
                 $receivingItems[] = [
                     'purchase_line_id' => $line->id,
                     'product_id' => $line->product_id,
+                    'supplier_id' => $line->supplier_id ?? $purchase->supplier_id,
                     'unit_name' => $line->unit_name,
                     'conversion_factor' => $line->conversion_factor,
                     'quantity_received' => $itemData['quantity_received'],

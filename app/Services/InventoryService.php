@@ -20,7 +20,7 @@ class InventoryService
      */
     public function receiveGoods(
         int $purchaseId,
-        int $supplierId,
+        ?int $supplierId,
         int $warehouseId,
         string $invoiceDrNumber,
         string $receiptDate,
@@ -29,9 +29,11 @@ class InventoryService
     ): void {
         DB::transaction(function () use ($purchaseId, $supplierId, $warehouseId, $invoiceDrNumber, $receiptDate, $items, $userId) {
             $totalPurchaseAmount = 0;
+            $supplierTotals = [];
 
             foreach ($items as $item) {
                 $product = Product::findOrFail($item['product_id']);
+                $itemSupplierId = $item['supplier_id'] ?? $supplierId;
                 $conversionFactor = (float) ($item['conversion_factor'] ?? 1);
                 $receivedQty = (float) $item['quantity_received']; // in purchase unit
                 $baseQty = $receivedQty * $conversionFactor;
@@ -39,6 +41,10 @@ class InventoryService
                 $baseCost = $conversionFactor > 0 ? ($unitCost / $conversionFactor) : $unitCost;
                 $lineTotal = $receivedQty * $unitCost;
                 $totalPurchaseAmount += $lineTotal;
+
+                if ($itemSupplierId) {
+                    $supplierTotals[$itemSupplierId] = ($supplierTotals[$itemSupplierId] ?? 0) + $lineTotal;
+                }
 
                 $currentStock = $product->available_stock;
                 $oldAvgCost = (float) $product->average_cost;
@@ -64,7 +70,7 @@ class InventoryService
                     'purchase_id' => $purchaseId,
                     'purchase_line_id' => $item['purchase_line_id'] ?? null,
                     'product_id' => $product->id,
-                    'supplier_id' => $supplierId,
+                    'supplier_id' => $itemSupplierId,
                     'warehouse_id' => $warehouseId,
                     'receipt_date' => $receiptDate,
                     'invoice_dr_number' => $invoiceDrNumber,
@@ -92,17 +98,21 @@ class InventoryService
                 ]);
 
                 // Update product_supplier pivot
-                $product->suppliers()->syncWithoutDetaching([
-                    $supplierId => [
-                        'last_purchase_cost' => $unitCost,
-                    ]
-                ]);
+                if ($itemSupplierId) {
+                    $product->suppliers()->syncWithoutDetaching([
+                        $itemSupplierId => [
+                            'last_purchase_cost' => $unitCost,
+                        ]
+                    ]);
+                }
             }
 
-            // Update Supplier Balance
-            $supplier = Supplier::find($supplierId);
-            if ($supplier) {
-                $supplier->increment('outstanding_balance', $totalPurchaseAmount);
+            // Update Supplier Balances per supplier
+            foreach ($supplierTotals as $supId => $amount) {
+                $supplier = Supplier::find($supId);
+                if ($supplier && $amount > 0) {
+                    $supplier->increment('outstanding_balance', $amount);
+                }
             }
         });
     }

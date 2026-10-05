@@ -12,10 +12,12 @@ class InvoiceAllocation extends Model
         'sale_id',
         'purchase_id',
         'allocated_amount',
+        'tax_allocated',
     ];
 
     protected $casts = [
         'allocated_amount' => 'decimal:2',
+        'tax_allocated' => 'decimal:2',
     ];
 
     public function payment(): BelongsTo
