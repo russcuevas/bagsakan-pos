@@ -3,8 +3,14 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
+use App\Models\User;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -88,6 +94,76 @@ class AuthController extends Controller
         return back()->withErrors([
             'email_or_username' => 'The provided credentials do not match our records.',
         ])->onlyInput('email_or_username');
+    }
+
+    public function showForgotPassword()
+    {
+        if (Auth::check()) {
+            return redirect('/');
+        }
+        return view('auth.forgot-password');
+    }
+
+    public function sendResetLinkEmail(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        $user = User::where('email', $request->email)->first();
+        if ($user && $user->status !== 'active') {
+            return back()->withErrors([
+                'email' => 'This account is currently deactivated. Please contact your system administrator.'
+            ]);
+        }
+
+        $status = Password::sendResetLink(
+            $request->only('email')
+        );
+
+        if ($status === Password::RESET_LINK_SENT) {
+            return back()->with('status', __($status));
+        }
+
+        return back()->withErrors(['email' => __($status)]);
+    }
+
+    public function showResetPassword(Request $request, $token = null)
+    {
+        return view('auth.reset-password', [
+            'token' => $token,
+            'email' => $request->email,
+        ]);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'token' => 'required',
+            'email' => 'required|email',
+            'password' => 'required|confirmed|min:6',
+        ]);
+
+        $status = Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function ($user, string $password) {
+                $user->forceFill([
+                    'password' => Hash::make($password)
+                ])->setRememberToken(Str::random(60));
+
+                $user->save();
+
+                event(new PasswordReset($user));
+
+                AuditLog::log('password_reset', User::class, $user->id, null, ['email' => $user->email], 'User reset their password via email link');
+            }
+        );
+
+        if ($status === Password::PASSWORD_RESET) {
+            return redirect()->route('login')->with('success', 'Your password has been reset successfully! You can now log in with your new password.');
+        }
+
+        return back()->withErrors(['email' => __($status)]);
     }
 
     public function updateProfile(Request $request)

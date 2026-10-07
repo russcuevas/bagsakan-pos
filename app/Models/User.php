@@ -48,6 +48,11 @@ class User extends Authenticatable
         return $this->role === 'cashier';
     }
 
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new \App\Notifications\ResetPasswordNotification($token));
+    }
+
     public function hasRole(array|string $roles): bool
     {
         if (is_string($roles)) {

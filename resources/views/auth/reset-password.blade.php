@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Log in to Bagsakan POS | Worthy Acosta</title>
+    <title>Set New Password | Bagsakan POS - Worthy Acosta</title>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -67,7 +67,7 @@
         .showcase-top-logo span {
             font-size: 0.85rem;
             font-weight: 700;
-            color: var(--color-deep-navy);
+            color: #102A4E;
             letter-spacing: -0.01em;
         }
 
@@ -136,12 +136,12 @@
 
         .form-wrapper {
             width: 100%;
-            max-width: 390px;
+            max-width: 400px;
         }
 
         .form-brand-header {
             text-align: center;
-            margin-bottom: 32px;
+            margin-bottom: 26px;
         }
 
         .form-logo-img {
@@ -165,10 +165,18 @@
             font-weight: 800;
             color: #102A4E;
             letter-spacing: -0.02em;
+            margin-bottom: 8px;
+        }
+
+        .form-subtitle {
+            font-size: 0.88rem;
+            color: #64748B;
+            line-height: 1.5;
         }
 
         .custom-input-group {
             margin-bottom: 18px;
+            position: relative;
         }
 
         .custom-label {
@@ -201,7 +209,30 @@
             color: #94A3B8;
         }
 
-        .btn-submit-login {
+        .input-with-icon {
+            position: relative;
+        }
+
+        .toggle-password-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #94A3B8;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            padding: 4px;
+        }
+
+        .toggle-password-btn:hover {
+            color: #075998;
+        }
+
+        .btn-submit-action {
             width: 100%;
             padding: 13px;
             font-size: 0.95rem;
@@ -217,58 +248,55 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
-            margin-top: 24px;
+            margin-top: 22px;
             box-shadow: 0 4px 14px rgba(7, 89, 152, 0.25);
         }
 
-        .btn-submit-login:hover {
+        .btn-submit-action:hover {
             background: #102A4E;
             box-shadow: 0 6px 18px rgba(16, 42, 78, 0.3);
             transform: translateY(-1px);
         }
 
-        .btn-submit-login:active {
+        .btn-submit-action:active {
             transform: translateY(0);
         }
 
+        .btn-back-login {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+            padding: 11px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #475569;
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            text-decoration: none;
+            margin-top: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-back-login:hover {
+            background: #F1F5F9;
+            color: #0F172A;
+            border-color: #CBD5E1;
+        }
 
         .error-banner {
             background-color: #FEF2F2;
             border: 1px solid #FEE2E2;
             color: #991B1B;
-            padding: 10px 14px;
+            padding: 12px 14px;
             border-radius: 8px;
-            font-size: 0.82rem;
-            margin-bottom: 18px;
+            font-size: 0.84rem;
+            margin-bottom: 20px;
             display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .success-banner {
-            background-color: #F0FDF4;
-            border: 1px solid #DCFCE7;
-            color: #166534;
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-size: 0.82rem;
-            margin-bottom: 18px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .forgot-pass-link {
-            font-size: 0.78rem;
-            font-weight: 600;
-            color: #075998;
-            text-decoration: none;
-            transition: color 0.2s ease;
-        }
-
-        .forgot-pass-link:hover {
-            color: #102A4E;
-            text-decoration: underline;
+            align-items: flex-start;
+            gap: 10px;
         }
 
         /* Responsive */
@@ -314,9 +342,13 @@
                 </div>
 
                 <h1 class="hero-headline">
-                    Empowering Fresh
-                    <span class="hero-highlight">Bagsakan Excellence.</span>
+                    Secure Account
+                    <span class="hero-highlight">Password Reset.</span>
                 </h1>
+                <p class="hero-tagline">
+                    Choose a strong, unique password to secure your Bagsakan POS account and maintain operational
+                    integrity.
+                </p>
             </div>
 
             <div class="showcase-footer-text">
@@ -329,48 +361,62 @@
             <div class="form-wrapper">
                 <div class="form-brand-header">
                     <img src="{{ asset('assets/images/logo.png') }}" alt="Worthy Acosta Logo" class="form-logo-img">
-                    <div class="form-brand-kicker">Bagsakan Kalidad Food Products Trading</div>
-                    <h2 class="form-main-title">Log into Bagsakan POS</h2>
+                    <div class="form-brand-kicker">Account Security</div>
+                    <h2 class="form-main-title">Create New Password</h2>
+                    <p class="form-subtitle">Enter your email and choose your new secure password.</p>
                 </div>
-
-                @if (session('status'))
-                    <div class="success-banner">
-                        <i class="bi bi-check-circle-fill" style="font-size: 1rem; color: #16A34A;"></i>
-                        <div>{{ session('status') }}</div>
-                    </div>
-                @endif
 
                 @if ($errors->any())
                     <div class="error-banner">
-                        <i class="bi bi-exclamation-circle-fill" style="font-size: 1rem;"></i>
+                        <i class="bi bi-exclamation-circle-fill" style="font-size: 1.1rem; flex-shrink: 0;"></i>
                         <div>{{ $errors->first() }}</div>
                     </div>
                 @endif
 
-                <form action="{{ route('login.submit') }}" method="POST">
+                <form action="{{ route('password.update') }}" method="POST">
                     @csrf
 
+                    <input type="hidden" name="token" value="{{ $token }}">
+
                     <div class="custom-input-group">
-                        <label class="custom-label" for="email_or_username">Email or Username</label>
-                        <input type="text" id="email_or_username" name="email_or_username" class="custom-input"
-                            placeholder="Enter your email or username"
-                            value="{{ old('email_or_username') }}" required autofocus>
+                        <label class="custom-label" for="email">Account Email</label>
+                        <input type="email" id="email" name="email" class="custom-input"
+                            placeholder="admin@bagsakan.com" value="{{ old('email', $email) }}" required>
                     </div>
 
                     <div class="custom-input-group">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                            <label class="custom-label" for="password" style="margin-bottom: 0;">Password</label>
-                            <a href="{{ route('password.request') }}" class="forgot-pass-link">Forgot password?</a>
+                        <label class="custom-label" for="password">New Password</label>
+                        <div class="input-with-icon">
+                            <input type="password" id="password" name="password" class="custom-input"
+                                placeholder="At least 6 characters" required autofocus>
+                            <button type="button" class="toggle-password-btn"
+                                onclick="togglePassVisibility('password', this)" tabindex="-1">
+                                <i class="bi bi-eye"></i>
+                            </button>
                         </div>
-                        <input type="password" id="password" name="password" class="custom-input"
-                            placeholder="Enter password" required>
                     </div>
 
-                    <button type="submit" class="btn-submit-login">
-                        <span>Log in</span>
-                        <i class="bi bi-arrow-right"></i>
+                    <div class="custom-input-group">
+                        <label class="custom-label" for="password_confirmation">Confirm New Password</label>
+                        <div class="input-with-icon">
+                            <input type="password" id="password_confirmation" name="password_confirmation"
+                                class="custom-input" placeholder="Re-enter your new password" required>
+                            <button type="button" class="toggle-password-btn"
+                                onclick="togglePassVisibility('password_confirmation', this)" tabindex="-1">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-submit-action">
+                        <i class="bi bi-check2-circle"></i>
+                        <span>Update & Save Password</span>
                     </button>
+
+                    <a href="{{ route('login') }}" class="btn-back-login">
+                        <i class="bi bi-arrow-left"></i>
+                        <span>Back to Log In</span>
+                    </a>
                 </form>
             </div>
         </div>
@@ -382,18 +428,19 @@
     <!-- Scripts -->
     <script src="{{ asset('assets/js/bagsakan.js') }}"></script>
     <script>
-
-        @if (session('success'))
-            document.addEventListener('DOMContentLoaded', () => {
-                showToast('info', 'Signed Out', @json(session('success')));
-            });
-        @endif
-
-        @if (session('error'))
-            document.addEventListener('DOMContentLoaded', () => {
-                showToast('error', 'Error', @json(session('error')));
-            });
-        @endif
+        function togglePassVisibility(inputId, btn) {
+            const input = document.getElementById(inputId);
+            const icon = btn.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('bi-eye');
+                icon.classList.add('bi-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('bi-eye-slash');
+                icon.classList.add('bi-eye');
+            }
+        }
     </script>
 </body>
 

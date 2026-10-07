@@ -44,6 +44,12 @@ Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::put('/profile', [AuthController::class, 'updateProfile'])->name('profile.update')->middleware('auth');
 
+// Password Reset Routes
+Route::get('/forgot-password', [AuthController::class, 'showForgotPassword'])->name('password.request');
+Route::post('/forgot-password', [AuthController::class, 'sendResetLinkEmail'])->name('password.email');
+Route::get('/reset-password/{token}', [AuthController::class, 'showResetPassword'])->name('password.reset');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('password.update');
+
 // Shared Quotation Routes (Print & Modal data accessible to all authenticated roles)
 Route::middleware(['auth'])->group(function () {
     Route::get('/quotations/{quotation}/print', [QuotationController::class, 'print'])->name('quotations.print');
