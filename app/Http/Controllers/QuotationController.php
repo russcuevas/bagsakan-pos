@@ -181,9 +181,28 @@ class QuotationController extends Controller
     public function show(Quotation $quotation)
     {
         $quotation->load(['customer', 'preparer', 'items.product.units', 'convertedSale']);
+
+        $itemsWithStock = $quotation->items->map(function ($item) {
+            $product = $item->product;
+            $currentStock = $product ? (float) $product->available_stock : 0;
+            $conversionFactor = (float) ($item->conversion_factor ?: 1);
+            $orderedBaseQty = (float) $item->quantity * $conversionFactor;
+            $projectedStock = $currentStock - $orderedBaseQty;
+
+            return array_merge($item->toArray(), [
+                'available_stock' => $currentStock,
+                'base_unit' => $product?->base_unit ?? $item->unit_name,
+                'ordered_base_qty' => $orderedBaseQty,
+                'projected_stock' => $projectedStock,
+                'needs_reorder' => $projectedStock < 0,
+                'deficit_qty' => $projectedStock < 0 ? abs($projectedStock) : 0,
+            ]);
+        });
+
         return response()->json([
             'success' => true,
             'quotation' => $quotation,
+            'items_with_stock' => $itemsWithStock,
         ]);
     }
 
@@ -223,7 +242,13 @@ class QuotationController extends Controller
     public function print(Request $request, Quotation $quotation)
     {
         $quotation->load(['customer', 'preparer', 'items.product']);
-        $withPrice = $request->get('with_price', 1) == 1 && $request->get('no_price', 0) != 1;
+        
+        $withPrice = true;
+        if ($request->has('no_price') && ($request->no_price == '1' || $request->no_price === true || $request->no_price === 'true')) {
+            $withPrice = false;
+        } elseif ($request->has('with_price')) {
+            $withPrice = filter_var($request->with_price, FILTER_VALIDATE_BOOLEAN);
+        }
 
         return view('quotations.print', compact('quotation', 'withPrice'));
     }

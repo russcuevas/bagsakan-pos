@@ -72,12 +72,12 @@ class Product extends Model
 
     public function getAvailableStockAttribute(): float
     {
-        return (float) $this->activeBatches()->sum('current_quantity');
+        return (float) $this->batches()->where('status', 'active')->sum('current_quantity');
     }
 
     public function getStockInWarehouse(int $warehouseId): float
     {
-        return (float) $this->activeBatches()->where('warehouse_id', $warehouseId)->sum('current_quantity');
+        return (float) $this->batches()->where('warehouse_id', $warehouseId)->where('status', 'active')->sum('current_quantity');
     }
 
     public function getImageUrlAttribute(): string

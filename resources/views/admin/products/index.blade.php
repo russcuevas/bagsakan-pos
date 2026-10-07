@@ -10,9 +10,14 @@
             <h2 class="card-title">Products Directory</h2>
             <p class="card-description">Manage SKUs, wholesale/retail units, suppliers, and SRP</p>
         </div>
-        <button type="button" class="btn btn-primary" onclick="openModal('addProductModal')">
-            <i class="bi bi-plus-lg"></i> Add New Product
-        </button>
+        <div style="display: flex; gap: 8px;">
+            <a href="{{ route('admin.categories.index') }}" class="btn btn-outline">
+                <i class="bi bi-grid me-1"></i> Manage Categories
+            </a>
+            <button type="button" class="btn btn-primary" onclick="openModal('addProductModal')">
+                <i class="bi bi-plus-lg"></i> Add New Product
+            </button>
+        </div>
     </div>
     <div class="card-body">
         <div class="table-responsive">
@@ -51,7 +56,11 @@
                             </td>
                             <td><span class="badge badge-navy">{{ $product->category->name ?? 'Uncategorized' }}</span></td>
                             <td>
-                                @if($stock <= 0)
+                                @if($stock < 0)
+                                    <span class="badge badge-danger" style="background: #dc2626; color: #fff; font-weight: 700;">
+                                        {{ number_format($stock, 2) }} {{ $product->base_unit }} (Reorder Needed)
+                                    </span>
+                                @elseif($stock == 0)
                                     <span class="badge badge-danger">Out of Stock (0 {{ $product->base_unit }})</span>
                                 @elseif($stock <= $product->low_stock_threshold)
                                     <span class="badge badge-warning">Low: {{ number_format($stock, 2) }} {{ $product->base_unit }}</span>

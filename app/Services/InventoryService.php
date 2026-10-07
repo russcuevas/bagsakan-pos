@@ -120,9 +120,9 @@ class InventoryService
     /**
      * Process checkout and stock deduction (supports FIFO/batch allocation, unit conversions, and anti-overselling)
      */
-    public function processSale(Sale $sale, array $cartItems, ?int $userId = null): void
+    public function processSale(Sale $sale, array $cartItems, ?int $userId = null, bool $allowNegativeStock = true): void
     {
-        DB::transaction(function () use ($sale, $cartItems, $userId) {
+        DB::transaction(function () use ($sale, $cartItems, $userId, $allowNegativeStock) {
             $totalCogs = 0;
 
             foreach ($cartItems as $item) {
@@ -135,13 +135,18 @@ class InventoryService
                 $subtotal = ($soldQty * $unitPrice) - $lineDiscount;
 
                 // Validate available stock
-                $currentStock = $product->available_stock;
-                if ($currentStock < $baseQtyNeeded) {
+                $currentStock = (float) $product->available_stock;
+                if (!$allowNegativeStock && $currentStock < $baseQtyNeeded) {
                     throw new \Exception("Insufficient stock for {$product->name}. Requested: {$soldQty} {$item['unit_name']} ({$baseQtyNeeded} {$product->base_unit}), Available: {$currentStock} {$product->base_unit}.");
                 }
 
-                // Batch Allocation (FIFO - oldest active batch first)
-                $activeBatches = $product->activeBatches()->orderBy('receipt_date', 'asc')->orderBy('id', 'asc')->get();
+                // Batch Allocation (FIFO - oldest active positive batch first)
+                $activeBatches = $product->activeBatches()->where('warehouse_id', $sale->warehouse_id)->orderBy('receipt_date', 'asc')->orderBy('id', 'asc')->get();
+                if ($activeBatches->isEmpty()) {
+                    // Fallback to any warehouse active batch if warehouse-specific has none
+                    $activeBatches = $product->activeBatches()->orderBy('receipt_date', 'asc')->orderBy('id', 'asc')->get();
+                }
+
                 $remainingBaseQtyToDeduct = $baseQtyNeeded;
                 $itemTotalCogs = 0;
                 $firstBatchId = null;
@@ -165,8 +170,38 @@ class InventoryService
                     $remainingBaseQtyToDeduct -= $deductFromThisBatch;
                 }
 
-                // Fallback for COGS if no batch or remainder
+                // If still has shortfall (negative stock scenario)
                 if ($remainingBaseQtyToDeduct > 0) {
+                    // Find or create active deficit batch
+                    $deficitBatch = ReceivingBatch::where('product_id', $product->id)
+                        ->where('warehouse_id', $sale->warehouse_id)
+                        ->where('status', 'active')
+                        ->latest('id')
+                        ->first();
+
+                    if ($deficitBatch) {
+                        $deficitBatch->current_quantity -= $remainingBaseQtyToDeduct;
+                        $deficitBatch->save();
+                        $firstBatchId = $firstBatchId ?? $deficitBatch->id;
+                    } else {
+                        $batchCode = 'BATCH-DEFICIT-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+                        $deficitBatch = ReceivingBatch::create([
+                            'batch_code' => $batchCode,
+                            'purchase_id' => null,
+                            'purchase_line_id' => null,
+                            'product_id' => $product->id,
+                            'supplier_id' => $product->suppliers()->first()?->id,
+                            'warehouse_id' => $sale->warehouse_id,
+                            'receipt_date' => now()->toDateString(),
+                            'invoice_dr_number' => 'ORDER-DEFICIT',
+                            'initial_quantity' => 0,
+                            'current_quantity' => -$remainingBaseQtyToDeduct,
+                            'unit_cost' => (float) $product->average_cost,
+                            'status' => 'active',
+                        ]);
+                        $firstBatchId = $firstBatchId ?? $deficitBatch->id;
+                    }
+
                     $itemTotalCogs += $remainingBaseQtyToDeduct * (float) $product->average_cost;
                 }
 
@@ -189,6 +224,12 @@ class InventoryService
                     'subtotal' => $subtotal,
                 ]);
 
+                $stockAfter = $currentStock - $baseQtyNeeded;
+                $noteMsg = "Sold {$soldQty} {$item['unit_name']} via Sale #{$sale->sale_number}";
+                if ($stockAfter < 0) {
+                    $noteMsg .= " (Deficit Balance: {$stockAfter} {$product->base_unit} - Reorder Needed)";
+                }
+
                 // Record Inventory Movement
                 InventoryMovement::create([
                     'product_id' => $product->id,
@@ -201,8 +242,8 @@ class InventoryService
                     'unit_cost' => $lineUnitCost,
                     'unit_price' => $unitPrice,
                     'stock_before' => $currentStock,
-                    'stock_after' => $currentStock - $baseQtyNeeded,
-                    'notes' => "Sold {$soldQty} {$item['unit_name']} via Sale #{$sale->sale_number}",
+                    'stock_after' => $stockAfter,
+                    'notes' => $noteMsg,
                     'created_by' => $userId ?? auth()->id(),
                 ]);
             }

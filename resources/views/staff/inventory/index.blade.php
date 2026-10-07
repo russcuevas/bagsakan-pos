@@ -32,12 +32,14 @@
                                 <div style="font-size: 0.74rem; color: var(--text-light);">{{ $p->sku }} &bull; {{ $p->barcode ?? 'No Barcode' }}</div>
                             </td>
                             <td><span class="badge badge-navy">{{ $p->category->name ?? 'General' }}</span></td>
-                            <td style="font-weight: 800; font-size: 1rem; color: var(--color-deep-navy);">
+                            <td style="font-weight: 800; font-size: 1rem; color: {{ $stk < 0 ? '#dc2626' : 'var(--color-deep-navy)' }};">
                                 {{ number_format($stk, 2) }} {{ $p->base_unit }}
                             </td>
                             <td>{{ $p->low_stock_threshold }} {{ $p->base_unit }}</td>
                             <td>
-                                @if($stk <= 0)
+                                @if($stk < 0)
+                                    <span class="badge badge-danger" style="background: #dc2626; color: #fff; font-weight: 700;">Reorder Needed</span>
+                                @elseif($stk == 0)
                                     <span class="badge badge-danger">Out of Stock</span>
                                 @elseif($stk <= $p->low_stock_threshold)
                                     <span class="badge badge-warning">Low Stock Warning</span>
