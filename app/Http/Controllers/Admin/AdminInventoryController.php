@@ -104,7 +104,7 @@ class AdminInventoryController extends Controller
                     $batch = ReceivingBatch::create([
                         'batch_code' => 'BATCH-ADJ-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -4)),
                         'product_id' => $product->id,
-                        'supplier_id' => $product->suppliers()->first()->id ?? 1,
+                        'supplier_id' => $product->suppliers()->first()?->id,
                         'warehouse_id' => $validated['warehouse_id'],
                         'receipt_date' => now()->format('Y-m-d'),
                         'invoice_dr_number' => $adjNum,

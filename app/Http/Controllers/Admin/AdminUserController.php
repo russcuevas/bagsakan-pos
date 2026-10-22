@@ -87,4 +87,60 @@ class AdminUserController extends Controller
 
         return redirect()->route('admin.users.index')->with('success', 'User account updated successfully!');
     }
+
+    public function destroy(Request $request, User $user)
+    {
+        // Prevent deleting own account
+        if (auth()->id() === $user->id) {
+            $msg = 'You cannot delete your own account while logged in.';
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $msg,
+                ], 422);
+            }
+            return back()->with('error', $msg);
+        }
+
+        // Prevent deleting the only remaining admin account
+        if ($user->isAdmin() && User::where('role', 'admin')->count() <= 1) {
+            $msg = 'Cannot delete this user because it is the only remaining Administrator account in the system.';
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $msg,
+                ], 422);
+            }
+            return back()->with('error', $msg);
+        }
+
+        $old = [
+            'name' => $user->name,
+            'username' => $user->username,
+            'email' => $user->email,
+            'role' => $user->role,
+            'status' => $user->status,
+        ];
+        $userName = $user->name;
+
+        $user->delete();
+
+        AuditLog::log(
+            'user_deleted',
+            User::class,
+            $user->id,
+            $old,
+            null,
+            "Deleted user account: {$userName}"
+        );
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "User account '{$userName}' deleted successfully!",
+            ]);
+        }
+
+        return redirect()->route('admin.users.index')->with('success', "User account '{$userName}' deleted successfully!");
+    }
 }

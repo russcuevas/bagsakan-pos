@@ -50,9 +50,20 @@
                                 </span>
                             </td>
                             <td style="text-align: right;">
-                                <button type="button" class="btn btn-sm btn-outline" onclick="editUser({{ $u->id }}, '{{ addslashes($u->name) }}', '{{ $u->username }}', '{{ $u->email }}', '{{ $u->role }}', '{{ $u->phone }}', '{{ $u->status }}')">
-                                    <i class="bi bi-pencil me-1"></i> Edit
-                                </button>
+                                <div style="display: inline-flex; gap: 6px; justify-content: flex-end;">
+                                    <button type="button" class="btn btn-sm btn-outline" onclick="editUser({{ $u->id }}, '{{ addslashes($u->name) }}', '{{ addslashes($u->username) }}', '{{ addslashes($u->email) }}', '{{ $u->role }}', '{{ addslashes($u->phone ?? '') }}', '{{ $u->status }}')" title="Edit User">
+                                        <i class="bi bi-pencil me-1"></i> Edit
+                                    </button>
+                                    @if(auth()->id() !== $u->id)
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmDeleteUser({{ $u->id }}, '{{ addslashes($u->name) }}', '{{ addslashes($u->username) }}')" title="Delete Account">
+                                            <i class="bi bi-trash3 me-1"></i> Delete
+                                        </button>
+                                    @else
+                                        <button type="button" class="btn btn-sm btn-outline" disabled title="Current logged-in account cannot be deleted" style="opacity: 0.5; cursor: not-allowed;">
+                                            <i class="bi bi-person-check me-1"></i> Current
+                                        </button>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @endforeach
@@ -178,6 +189,36 @@
         </form>
     </div>
 </div>
+
+<!-- Delete User Confirmation Modal -->
+<div id="deleteUserModal" class="modal-overlay">
+    <div class="modal-dialog" style="max-width: 460px;">
+        <div class="modal-header">
+            <h3 class="modal-title text-danger"><i class="bi bi-exclamation-triangle me-2"></i> Delete User Account</h3>
+            <button type="button" class="modal-close-btn" data-close-modal="deleteUserModal"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form id="deleteUserForm" method="POST" class="ajax-form">
+            @csrf
+            @method('DELETE')
+            <div class="modal-body">
+                <p style="font-size: 0.95rem; margin-bottom: 12px; color: var(--text-main);">
+                    Are you sure you want to permanently delete this user account?
+                </p>
+                <div style="font-weight: 700; color: var(--color-deep-navy); font-size: 1.05rem; padding: 12px 14px; background: var(--body-bg); border-radius: var(--radius-sm); border: 1px solid var(--card-border);">
+                    <div id="deleteUserNameDisplay"></div>
+                    <div style="font-size: 0.8rem; font-weight: 500; color: var(--text-muted); margin-top: 4px;" id="deleteUserUsernameDisplay"></div>
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 12px;">
+                    <i class="bi bi-info-circle text-primary me-1"></i> Note: Associated historical audit logs and transactions will remain securely preserved.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" data-close-modal="deleteUserModal">Cancel</button>
+                <button type="submit" class="btn btn-danger"><i class="bi bi-trash3 me-1"></i> Delete Account</button>
+            </div>
+        </form>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -192,6 +233,13 @@
         document.getElementById('edit_u_status').value = status;
         document.getElementById('edit_u_pass').value = '';
         openModal('editUserModal');
+    }
+
+    function confirmDeleteUser(id, name, username) {
+        document.getElementById('deleteUserForm').action = `/admin/users/${id}`;
+        document.getElementById('deleteUserNameDisplay').innerText = name;
+        document.getElementById('deleteUserUsernameDisplay').innerText = username ? `@${username}` : '';
+        openModal('deleteUserModal');
     }
 </script>
 @endpush
