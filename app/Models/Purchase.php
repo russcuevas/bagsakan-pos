@@ -35,7 +35,52 @@ class Purchase extends Model
         'formatted_created_at',
         'supplier_display',
         'is_multi_supplier',
+        'total_ordered_quantity',
+        'total_received_quantity',
+        'deficit_quantity',
+        'is_partial',
+        'status_label',
     ];
+
+    public function getTotalOrderedQuantityAttribute(): float
+    {
+        if ($this->relationLoaded('lines')) {
+            return (float) $this->lines->sum('quantity_ordered');
+        }
+        return (float) $this->lines()->sum('quantity_ordered');
+    }
+
+    public function getTotalReceivedQuantityAttribute(): float
+    {
+        if ($this->relationLoaded('lines')) {
+            return (float) $this->lines->sum('quantity_received');
+        }
+        return (float) $this->lines()->sum('quantity_received');
+    }
+
+    public function getDeficitQuantityAttribute(): float
+    {
+        return max(0, $this->total_ordered_quantity - $this->total_received_quantity);
+    }
+
+    public function getIsPartialAttribute(): bool
+    {
+        return $this->status === 'partial' || ($this->total_received_quantity > 0 && $this->total_received_quantity < $this->total_ordered_quantity);
+    }
+
+    public function getStatusLabelAttribute(): string
+    {
+        if ($this->status === 'received' && $this->deficit_quantity <= 0) {
+            return 'Received';
+        }
+        if ($this->status === 'partial' || ($this->total_received_quantity > 0 && $this->deficit_quantity > 0)) {
+            return 'Received Partial';
+        }
+        if ($this->status === 'ordered') {
+            return 'Ordered';
+        }
+        return ucfirst($this->status);
+    }
 
     public function getFormattedPurchaseDateAttribute(): string
     {

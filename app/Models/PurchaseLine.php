@@ -43,4 +43,19 @@ class PurchaseLine extends Model
     {
         return $this->belongsTo(Supplier::class);
     }
+
+    public function batches()
+    {
+        return $this->hasMany(ReceivingBatch::class, 'purchase_line_id');
+    }
+
+    public function getDeficitQuantityAttribute(): float
+    {
+        return max(0, (float) $this->quantity_ordered - (float) $this->quantity_received);
+    }
+
+    public function getIsFullyReceivedAttribute(): bool
+    {
+        return (float) $this->quantity_received >= (float) $this->quantity_ordered;
+    }
 }

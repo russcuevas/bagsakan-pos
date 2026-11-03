@@ -30,14 +30,27 @@
                     @foreach($pendingPurchases as $p)
                         <tr>
                             <td><strong>{{ $p->purchase_number }}</strong></td>
-                            <td>{{ $p->supplier->name ?? 'N/A' }}</td>
+                            <td>{{ $p->supplier->name ?? ($p->is_multi_supplier ? 'Multi-Supplier' : 'N/A') }}</td>
                             <td>{{ $p->warehouse->name ?? 'Main' }}</td>
                             <td style="font-size: 0.8rem; color: var(--text-light);">{{ $p->purchase_date->format('M d, Y') }}</td>
-                            <td>{{ $p->lines->pluck('product.name')->implode(', ') }}</td>
-                            <td><span class="badge badge-warning">Awaiting DR Intake</span></td>
+                            <td>
+                                <div>{{ $p->lines->pluck('product.name')->implode(', ') }}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                    Ordered: <strong>{{ number_format($p->total_ordered_quantity, 1) }}</strong> | 
+                                    Received: <strong class="text-success">{{ number_format($p->total_received_quantity, 1) }}</strong>
+                                </div>
+                            </td>
+                            <td>
+                                @if($p->status === 'partial' || $p->is_partial)
+                                    <span class="badge badge-warning" style="background: #f59e0b; color: #fff;">Received Partial</span>
+                                    <div style="font-size: 0.72rem; color: #b45309; font-weight: 700;">Deficit: {{ number_format($p->deficit_quantity, 1) }} left</div>
+                                @else
+                                    <span class="badge badge-warning">Awaiting DR Intake</span>
+                                @endif
+                            </td>
                             <td style="text-align: right;">
                                 <button type="button" class="btn btn-sm btn-success" onclick="openStaffReceiveModal({{ $p->id }})">
-                                    <i class="bi bi-box-arrow-in-down me-1"></i> Receive Goods
+                                    <i class="bi bi-box-arrow-in-down me-1"></i> {{ $p->total_received_quantity > 0 ? 'Receive More' : 'Receive Goods' }}
                                 </button>
                             </td>
                         </tr>
@@ -149,24 +162,35 @@
                             <tr>
                                 <th>Product SKU</th>
                                 <th>Unit</th>
-                                <th>Ordered</th>
-                                <th>Actual Quantity to Receive</th>
+                                <th style="text-align: center;">Ordered</th>
+                                <th style="text-align: center;">Prev Received</th>
+                                <th style="text-align: center;">Deficit to Date</th>
+                                <th style="text-align: center;">Receive Now</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${p.lines.map((l, i) => `
+                            ${p.lines.map((l, i) => {
+                                const ordered = parseFloat(l.quantity_ordered) || 0;
+                                const prevReceived = parseFloat(l.quantity_received) || 0;
+                                const deficit = Math.max(0, ordered - prevReceived);
+
+                                return `
                                 <tr>
                                     <td>
                                         <strong>${l.product ? l.product.name : 'N/A'}</strong>
+                                        <div style="font-size: 0.72rem; color: var(--text-muted);">${l.product ? l.product.sku : ''}</div>
                                         <input type="hidden" name="items[${i}][line_id]" value="${l.id}">
                                     </td>
                                     <td><span class="badge badge-navy">${l.unit_name}</span></td>
-                                    <td>${parseFloat(l.quantity_ordered).toFixed(2)}</td>
-                                    <td>
-                                        <input type="number" step="0.01" name="items[${i}][quantity_received]" class="form-control form-control-sm" value="${parseFloat(l.quantity_ordered) - parseFloat(l.quantity_received)}" required>
+                                    <td style="text-align: center; font-weight: 700;">${ordered.toFixed(2)}</td>
+                                    <td style="text-align: center; font-weight: 600;">${prevReceived.toFixed(2)}</td>
+                                    <td style="text-align: center; font-weight: 700; color: ${deficit > 0 ? '#b45309' : '#16a34a'};">${deficit.toFixed(2)}</td>
+                                    <td style="text-align: center; width: 140px;">
+                                        <input type="number" step="0.01" min="0" max="${deficit > 0 ? deficit : ordered}" name="items[${i}][quantity_received]" class="form-control form-control-sm text-center fw-bold" value="${deficit.toFixed(2)}" required>
                                     </td>
                                 </tr>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </tbody>
                     </table>
                 `;

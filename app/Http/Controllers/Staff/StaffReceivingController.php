@@ -23,7 +23,7 @@ class StaffReceivingController extends Controller
     public function index()
     {
         $pendingPurchases = Purchase::with(['supplier', 'warehouse', 'lines.product'])
-            ->whereIn('status', ['ordered', 'draft'])
+            ->whereIn('status', ['ordered', 'partial', 'draft'])
             ->latest('purchase_date')
             ->get();
 
@@ -67,9 +67,31 @@ class StaffReceivingController extends Controller
                 ];
             }
 
-            $purchase->invoice_dr_number = $validated['invoice_dr_number'];
-            $purchase->status = 'received';
-            $purchase->save();
+            if ($purchase->invoice_dr_number) {
+                if (!str_contains($purchase->invoice_dr_number, $validated['invoice_dr_number'])) {
+                    $purchase->invoice_dr_number .= ', ' . $validated['invoice_dr_number'];
+                }
+            } else {
+                $purchase->invoice_dr_number = $validated['invoice_dr_number'];
+            }
+
+            $purchase->load('lines');
+            $allCompleted = true;
+            foreach ($purchase->lines as $l) {
+                if ((float) $l->quantity_received < (float) $l->quantity_ordered) {
+                    $allCompleted = false;
+                    break;
+                }
+            }
+
+            $newStatus = $allCompleted ? 'received' : 'partial';
+            try {
+                $purchase->status = $newStatus;
+                $purchase->save();
+            } catch (\Throwable $e) {
+                $purchase->status = $allCompleted ? 'received' : 'ordered';
+                $purchase->save();
+            }
 
             $this->inventoryService->receiveGoods(
                 purchaseId: $purchase->id,
@@ -84,7 +106,9 @@ class StaffReceivingController extends Controller
             AuditLog::log('staff_goods_received', Purchase::class, $purchase->id, null, [
                 'dr_number' => $validated['invoice_dr_number'],
                 'receipt_date' => $validated['receipt_date'],
-            ], 'Inbound stock received by staff');
+                'status' => $newStatus,
+                'is_partial' => !$allCompleted,
+            ], $allCompleted ? 'Inbound stock fully received by staff' : 'Inbound stock partially received by staff (Received Partial)');
         });
 
         if ($request->ajax()) {

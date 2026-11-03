@@ -134,6 +134,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/purchases', [AdminPurchaseController::class, 'store'])->name('purchases.store');
     Route::get('/purchases/{purchase}', [AdminPurchaseController::class, 'show'])->name('purchases.show');
     Route::post('/purchases/{purchase}/receive', [AdminPurchaseController::class, 'receive'])->name('purchases.receive');
+    Route::get('/purchases/{purchase}/receiving-history', [AdminPurchaseController::class, 'receivingHistory'])->name('purchases.receiving-history');
 
     // Inventory & Adjustments
     Route::get('/inventory', [AdminInventoryController::class, 'index'])->name('inventory.index');
@@ -189,6 +190,8 @@ Route::middleware(['auth', 'role:purchasing,admin'])->prefix('staff')->name('sta
     Route::get('/purchases', [StaffPurchaseController::class, 'index'])->name('purchases.index');
     Route::post('/purchases', [StaffPurchaseController::class, 'store'])->name('purchases.store');
     Route::get('/purchases/{purchase}', [StaffPurchaseController::class, 'show'])->name('purchases.show');
+    Route::post('/purchases/{purchase}/receive', [StaffPurchaseController::class, 'receive'])->name('purchases.receive');
+    Route::get('/purchases/{purchase}/receiving-history', [StaffPurchaseController::class, 'receivingHistory'])->name('purchases.receiving-history');
 
     // Inbound Receiving
     Route::get('/receiving', [StaffReceivingController::class, 'index'])->name('receiving.index');

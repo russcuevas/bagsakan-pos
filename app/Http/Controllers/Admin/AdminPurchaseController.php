@@ -24,7 +24,7 @@ class AdminPurchaseController extends Controller
 
     public function index(Request $request)
     {
-        $relations = ['supplier', 'warehouse', 'creator', 'lines.product'];
+        $relations = ['supplier', 'warehouse', 'creator', 'lines.product', 'batches'];
         if (method_exists(\App\Models\PurchaseLine::class, 'supplier')) {
             $relations[] = 'lines.supplier';
         }
@@ -193,8 +193,11 @@ class AdminPurchaseController extends Controller
             $receivingItems = [];
 
             foreach ($validated['items'] as $itemData) {
+                $qty = (float) $itemData['quantity_received'];
+                if ($qty <= 0) continue;
+
                 $line = PurchaseLine::where('purchase_id', $purchase->id)->findOrFail($itemData['line_id']);
-                $line->quantity_received += $itemData['quantity_received'];
+                $line->quantity_received += $qty;
                 $line->save();
 
                 $receivingItems[] = [
@@ -203,29 +206,56 @@ class AdminPurchaseController extends Controller
                     'supplier_id' => $line->supplier_id ?? $purchase->supplier_id,
                     'unit_name' => $line->unit_name,
                     'conversion_factor' => $line->conversion_factor,
-                    'quantity_received' => $itemData['quantity_received'],
+                    'quantity_received' => $qty,
                     'unit_cost' => $line->unit_cost,
                 ];
             }
 
-            $purchase->invoice_dr_number = $validated['invoice_dr_number'];
-            $purchase->status = 'received';
-            $purchase->save();
+            if (!empty($receivingItems)) {
+                $this->inventoryService->receiveGoods(
+                    purchaseId: $purchase->id,
+                    supplierId: $purchase->supplier_id,
+                    warehouseId: $purchase->warehouse_id,
+                    invoiceDrNumber: $validated['invoice_dr_number'],
+                    receiptDate: $validated['receipt_date'],
+                    items: $receivingItems,
+                    userId: auth()->id()
+                );
+            }
 
-            $this->inventoryService->receiveGoods(
-                purchaseId: $purchase->id,
-                supplierId: $purchase->supplier_id,
-                warehouseId: $purchase->warehouse_id,
-                invoiceDrNumber: $validated['invoice_dr_number'],
-                receiptDate: $validated['receipt_date'],
-                items: $receivingItems,
-                userId: auth()->id()
-            );
+            if ($purchase->invoice_dr_number) {
+                if (!str_contains($purchase->invoice_dr_number, $validated['invoice_dr_number'])) {
+                    $purchase->invoice_dr_number .= ', ' . $validated['invoice_dr_number'];
+                }
+            } else {
+                $purchase->invoice_dr_number = $validated['invoice_dr_number'];
+            }
+
+            // Check if all lines are completely received
+            $purchase->load('lines');
+            $allCompleted = true;
+            foreach ($purchase->lines as $l) {
+                if ((float) $l->quantity_received < (float) $l->quantity_ordered) {
+                    $allCompleted = false;
+                    break;
+                }
+            }
+
+            $newStatus = $allCompleted ? 'received' : 'partial';
+            try {
+                $purchase->status = $newStatus;
+                $purchase->save();
+            } catch (\Throwable $e) {
+                $purchase->status = $allCompleted ? 'received' : 'ordered';
+                $purchase->save();
+            }
 
             AuditLog::log('goods_received', Purchase::class, $purchase->id, null, [
                 'dr_number' => $validated['invoice_dr_number'],
                 'receipt_date' => $validated['receipt_date'],
-            ], 'Goods receipt confirmed and stock posted');
+                'status' => $newStatus,
+                'is_partial' => !$allCompleted,
+            ], $allCompleted ? 'Goods fully received and completed' : 'Goods partially received (Received Partial - Deficit logged)');
         });
 
         if ($request->ajax()) {
@@ -236,5 +266,71 @@ class AdminPurchaseController extends Controller
         }
 
         return redirect()->route('admin.purchases.index')->with('success', 'Goods received and inventory updated!');
+    }
+
+    public function receivingHistory(Purchase $purchase)
+    {
+        $purchase->load([
+            'supplier',
+            'warehouse',
+            'lines.product',
+            'lines.supplier',
+            'batches.product',
+            'batches.supplier',
+            'batches.warehouse',
+            'batches.movements'
+        ]);
+
+        $batches = $purchase->batches->map(function ($b) {
+            return [
+                'id' => $b->id,
+                'batch_code' => $b->batch_code,
+                'purchase_line_id' => $b->purchase_line_id,
+                'product_name' => $b->product?->name ?? 'N/A',
+                'product_sku' => $b->product?->sku ?? 'N/A',
+                'supplier_name' => $b->supplier?->name ?? 'N/A',
+                'warehouse_name' => $b->warehouse?->name ?? 'N/A',
+                'receipt_date' => $b->receipt_date ? $b->receipt_date->format('M d, Y') : 'N/A',
+                'invoice_dr_number' => $b->invoice_dr_number,
+                'quantity_received' => (float) $b->initial_quantity,
+                'unit_cost' => (float) $b->unit_cost,
+                'received_by' => $b->movements->first()?->created_by ? (\App\Models\User::find($b->movements->first()->created_by)?->name ?? 'Staff') : 'Staff',
+                'created_at' => $b->created_at ? $b->created_at->format('M d, Y h:i A') : 'N/A',
+            ];
+        });
+
+        $linesSummary = $purchase->lines->map(function ($l) {
+            $ordered = (float) $l->quantity_ordered;
+            $received = (float) $l->quantity_received;
+            $deficit = max(0, $ordered - $received);
+
+            return [
+                'id' => $l->id,
+                'product_name' => $l->product?->name ?? 'N/A',
+                'product_sku' => $l->product?->sku ?? 'N/A',
+                'supplier_name' => $l->supplier?->name ?? 'N/A',
+                'unit_name' => $l->unit_name,
+                'quantity_ordered' => $ordered,
+                'quantity_received' => $received,
+                'deficit' => $deficit,
+                'status' => $deficit <= 0 ? 'Full' : ($received > 0 ? 'Partial' : 'Pending'),
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'purchase' => [
+                'id' => $purchase->id,
+                'purchase_number' => $purchase->purchase_number,
+                'status' => $purchase->status,
+                'status_label' => $purchase->status_label,
+                'total_ordered' => $purchase->total_ordered_quantity,
+                'total_received' => $purchase->total_received_quantity,
+                'total_deficit' => $purchase->deficit_quantity,
+                'invoice_dr_number' => $purchase->invoice_dr_number,
+            ],
+            'lines' => $linesSummary,
+            'batches' => $batches,
+        ]);
     }
 }

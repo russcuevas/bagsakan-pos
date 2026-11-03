@@ -50,6 +50,11 @@ class ReceivingBatch extends Model
         return $this->belongsTo(Purchase::class);
     }
 
+    public function purchaseLine(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseLine::class, 'purchase_line_id');
+    }
+
     public function movements(): HasMany
     {
         return $this->hasMany(InventoryMovement::class, 'batch_id');
