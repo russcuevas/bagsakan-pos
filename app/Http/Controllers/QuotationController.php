@@ -207,17 +207,210 @@ class QuotationController extends Controller
     }
 
     /**
+     * Update quotation
+     */
+    public function update(Request $request, Quotation $quotation)
+    {
+        if ($quotation->status === 'converted') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot edit a quotation that has already been converted to a sale.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'customer_id' => 'nullable|exists:customers,id',
+            'customer_name' => 'nullable|string|max:255',
+            'customer_contact' => 'nullable|string|max:100',
+            'customer_address' => 'nullable|string',
+            'quotation_date' => 'required|date',
+            'valid_until' => 'nullable|date|after_or_equal:quotation_date',
+            'discount_amount' => 'nullable|numeric|min:0',
+            'tax_amount' => 'nullable|numeric|min:0',
+            'remarks' => 'nullable|string',
+            'status' => 'nullable|in:draft,sent,accepted,approved,rejected,expired',
+            'items' => 'required|array|min:1',
+            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.sku' => 'required|string',
+            'items.*.description' => 'required|string',
+            'items.*.unit_name' => 'required|string',
+            'items.*.conversion_factor' => 'required|numeric|min:0.0001',
+            'items.*.quantity' => 'required|numeric|min:0.001',
+            'items.*.unit_price' => 'required|numeric|min:0',
+            'items.*.discount' => 'nullable|numeric|min:0',
+            'items.*.tax' => 'nullable|numeric|min:0',
+        ]);
+
+        DB::transaction(function () use ($quotation, $validated) {
+            $subtotal = 0;
+            $itemsData = [];
+
+            foreach ($validated['items'] as $item) {
+                $qty = (float) $item['quantity'];
+                $unitPrice = (float) $item['unit_price'];
+                $discount = (float) ($item['discount'] ?? 0);
+                $tax = (float) ($item['tax'] ?? 0);
+                $lineTotal = ($qty * $unitPrice) - $discount + $tax;
+                $subtotal += $lineTotal;
+
+                $itemsData[] = [
+                    'product_id' => $item['product_id'],
+                    'sku' => $item['sku'],
+                    'description' => $item['description'],
+                    'unit_name' => $item['unit_name'],
+                    'conversion_factor' => (float) $item['conversion_factor'],
+                    'quantity' => $qty,
+                    'unit_price' => $unitPrice,
+                    'discount' => $discount,
+                    'tax' => $tax,
+                    'total' => $lineTotal,
+                    'notes' => $item['notes'] ?? null,
+                ];
+            }
+
+            $discountAmount = (float) ($validated['discount_amount'] ?? 0);
+            $taxAmount = (float) ($validated['tax_amount'] ?? 0);
+            $totalAmount = max(0, $subtotal - $discountAmount + $taxAmount);
+
+            $custName = $validated['customer_name'] ?? null;
+            $custContact = $validated['customer_contact'] ?? null;
+            $custAddress = $validated['customer_address'] ?? null;
+
+            if (!empty($validated['customer_id'])) {
+                $c = Customer::find($validated['customer_id']);
+                if ($c) {
+                    $custName = $c->name . ($c->business_name ? " ({$c->business_name})" : '');
+                    $custContact = $c->contact_number;
+                    $custAddress = $c->address;
+                }
+            }
+
+            $updateData = [
+                'quotation_date' => $validated['quotation_date'],
+                'valid_until' => $validated['valid_until'] ?? null,
+                'customer_id' => $validated['customer_id'] ?? null,
+                'customer_name' => $custName,
+                'customer_contact' => $custContact,
+                'customer_address' => $custAddress,
+                'subtotal' => $subtotal,
+                'discount_amount' => $discountAmount,
+                'tax_amount' => $taxAmount,
+                'total_amount' => $totalAmount,
+                'remarks' => $validated['remarks'] ?? null,
+            ];
+
+            if (!empty($validated['status'])) {
+                $rawStatus = $validated['status'];
+                $updateData['status'] = ($rawStatus === 'approved') ? 'accepted' : $rawStatus;
+            }
+
+            $quotation->update($updateData);
+
+            $quotation->items()->delete();
+            foreach ($itemsData as $row) {
+                $quotation->items()->create($row);
+            }
+
+            AuditLog::log('quotation_updated', Quotation::class, $quotation->id, null, [
+                'quotation_number' => $quotation->quotation_number,
+                'total_amount' => $totalAmount,
+            ], "Updated Quotation #{$quotation->quotation_number}");
+        });
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Quotation updated successfully!',
+                'quotation' => $quotation->fresh(['items', 'customer']),
+            ]);
+        }
+
+        return back()->with('success', "Quotation {$quotation->quotation_number} updated successfully!");
+    }
+
+    /**
+     * Approve quotation
+     */
+    public function approve(Request $request, Quotation $quotation)
+    {
+        if ($quotation->status === 'converted') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This quotation is already converted to a sale.',
+            ], 422);
+        }
+
+        $oldStatus = $quotation->status;
+        $quotation->status = 'accepted';
+
+        if ($request->filled('remarks')) {
+            $quotation->remarks = ($quotation->remarks ? $quotation->remarks . "\n" : '') . "Approval Note (" . auth()->user()->name . "): " . $request->remarks;
+        }
+
+        $quotation->save();
+
+        AuditLog::log('quotation_approved', Quotation::class, $quotation->id, ['status' => $oldStatus], ['status' => 'accepted'], "Approved Quotation #{$quotation->quotation_number}");
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Quotation #{$quotation->quotation_number} has been approved!",
+                'quotation' => $quotation,
+            ]);
+        }
+
+        return back()->with('success', "Quotation #{$quotation->quotation_number} approved successfully!");
+    }
+
+    /**
+     * Reject quotation
+     */
+    public function reject(Request $request, Quotation $quotation)
+    {
+        if ($quotation->status === 'converted') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot reject a quotation that has already been converted to a sale.',
+            ], 422);
+        }
+
+        $oldStatus = $quotation->status;
+        $quotation->status = 'rejected';
+
+        if ($request->filled('reason')) {
+            $quotation->remarks = ($quotation->remarks ? $quotation->remarks . "\n" : '') . "Rejection Note: " . $request->reason;
+        }
+
+        $quotation->save();
+
+        AuditLog::log('quotation_rejected', Quotation::class, $quotation->id, ['status' => $oldStatus], ['status' => 'rejected'], "Rejected Quotation #{$quotation->quotation_number}");
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Quotation #{$quotation->quotation_number} marked as rejected.",
+                'quotation' => $quotation,
+            ]);
+        }
+
+        return back()->with('success', "Quotation #{$quotation->quotation_number} rejected.");
+    }
+
+    /**
      * Update quotation status (Draft -> Sent -> Accepted -> Rejected -> Expired)
      */
     public function updateStatus(Request $request, Quotation $quotation)
     {
         $validated = $request->validate([
-            'status' => 'required|in:draft,sent,accepted,rejected,expired,converted',
+            'status' => 'required|in:draft,sent,accepted,approved,rejected,expired,converted',
             'remarks' => 'nullable|string',
         ]);
 
+        $rawStatus = $validated['status'];
+        $newStatus = ($rawStatus === 'approved') ? 'accepted' : $rawStatus;
+
         $oldStatus = $quotation->status;
-        $quotation->status = $validated['status'];
+        $quotation->status = $newStatus;
         if (!empty($validated['remarks'])) {
             $quotation->remarks = ($quotation->remarks ? $quotation->remarks . "\n" : '') . "Status note: " . $validated['remarks'];
         }
@@ -398,13 +591,27 @@ class QuotationController extends Controller
     public function destroy(Quotation $quotation)
     {
         if ($quotation->status === 'converted') {
+            if (request()->ajax() || request()->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot delete a quotation that has already been converted to a sale.',
+                ], 422);
+            }
             return back()->with('error', 'Cannot delete a quotation that has already been converted to a sale.');
         }
 
         $num = $quotation->quotation_number;
+        $quotation->items()->delete();
         $quotation->delete();
 
         AuditLog::log('quotation_deleted', Quotation::class, null, null, ['quotation_number' => $num], "Deleted Quotation #{$num}");
+
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Quotation {$num} deleted successfully.",
+            ]);
+        }
 
         return back()->with('success', "Quotation {$num} deleted successfully.");
     }

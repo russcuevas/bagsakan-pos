@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\AdminPricingController;
 use App\Http\Controllers\Admin\AdminProductController;
 use App\Http\Controllers\Admin\AdminPurchaseController;
 use App\Http\Controllers\Admin\AdminPurchaseRequestController;
+use App\Http\Controllers\Admin\AdminQuotationController;
 use App\Http\Controllers\Admin\AdminReceivableController;
 use App\Http\Controllers\Admin\AdminReportController;
 use App\Http\Controllers\Admin\AdminSpoilageController;
@@ -56,6 +57,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/quotations/{quotation}/print', [QuotationController::class, 'print'])->name('quotations.print');
     Route::get('/quotations/{quotation}', [QuotationController::class, 'show'])->name('quotations.show');
     Route::post('/quotations', [QuotationController::class, 'store'])->name('quotations.store');
+    Route::put('/quotations/{quotation}', [QuotationController::class, 'update'])->name('quotations.update');
+    Route::post('/quotations/{quotation}/approve', [QuotationController::class, 'approve'])->name('quotations.approve');
+    Route::post('/quotations/{quotation}/reject', [QuotationController::class, 'reject'])->name('quotations.reject');
     Route::put('/quotations/{quotation}/status', [QuotationController::class, 'updateStatus'])->name('quotations.status');
     Route::post('/quotations/{quotation}/convert', [QuotationController::class, 'convertToSale'])->name('quotations.convert');
     Route::delete('/quotations/{quotation}', [QuotationController::class, 'destroy'])->name('quotations.destroy');
@@ -95,7 +99,15 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/warehouses/transfer', [AdminWarehouseController::class, 'transferStock'])->name('warehouses.transfer');
 
     // Quotations Module
-    Route::get('/quotations', [QuotationController::class, 'index'])->name('quotations.index');
+    Route::get('/quotations', [AdminQuotationController::class, 'index'])->name('quotations.index');
+    Route::post('/quotations', [AdminQuotationController::class, 'store'])->name('quotations.store');
+    Route::get('/quotations/{quotation}', [AdminQuotationController::class, 'show'])->name('quotations.show');
+    Route::put('/quotations/{quotation}', [AdminQuotationController::class, 'update'])->name('quotations.update');
+    Route::post('/quotations/{quotation}/approve', [AdminQuotationController::class, 'approve'])->name('quotations.approve');
+    Route::post('/quotations/{quotation}/reject', [AdminQuotationController::class, 'reject'])->name('quotations.reject');
+    Route::put('/quotations/{quotation}/status', [AdminQuotationController::class, 'updateStatus'])->name('quotations.status');
+    Route::post('/quotations/{quotation}/convert', [AdminQuotationController::class, 'convertToSale'])->name('quotations.convert');
+    Route::delete('/quotations/{quotation}', [AdminQuotationController::class, 'destroy'])->name('quotations.destroy');
 
     // Purchase Requests (PR Approval & Multi-Supplier PO Splitting)
     Route::get('/purchase-requests', [AdminPurchaseRequestController::class, 'index'])->name('purchase-requests.index');

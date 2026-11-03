@@ -193,6 +193,14 @@
                                                 title="Convert to Sale">
                                                 <i class="bi bi-cart-check"></i> Convert
                                             </button>
+
+                                            <form action="{{ route('quotations.destroy', $qtn->id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete quotation {{ $qtn->quotation_number }}?')">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Quotation">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
                                         @endif
                                     </div>
                                 </td>

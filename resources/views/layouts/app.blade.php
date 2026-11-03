@@ -103,7 +103,13 @@
                     <a href="{{ route('admin.quotations.index') }}"
                         class="nav-item {{ request()->routeIs('admin.quotations.*') ? 'active' : '' }}">
                         <i class="bi bi-file-earmark-text"></i>
-                        <span>Customer Order List</span>
+                        <span>Quotations</span>
+                        @php
+                            $pendingQuotationsNavCount = \App\Models\Quotation::whereIn('status', ['draft', 'sent'])->count();
+                        @endphp
+                        @if($pendingQuotationsNavCount > 0)
+                            <span class="badge badge-warning ms-auto" style="font-size: 0.7rem; padding: 2px 6px;">{{ $pendingQuotationsNavCount }}</span>
+                        @endif
                     </a>
                     <a href="{{ route('admin.customers.index') }}"
                         class="nav-item {{ request()->routeIs('admin.customers.*') ? 'active' : '' }}">
