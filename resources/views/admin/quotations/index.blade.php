@@ -69,6 +69,12 @@
                 <i class="bi bi-hourglass-split"></i> Pending Requests
                 <span class="badge {{ $activeTab === 'pending' ? 'badge-warning' : 'badge-navy' }}">{{ $counts['pending'] }}</span>
             </a>
+            <a href="{{ route('admin.quotations.index', array_merge(request()->query(), ['tab' => 'needs_revision'])) }}"
+               class="btn btn-link {{ $activeTab === 'needs_revision' ? 'fw-bold text-danger border-bottom border-danger border-2' : 'text-muted' }}"
+               style="text-decoration: none; border-radius: 0; padding: 12px 14px; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 6px;">
+                <i class="bi bi-arrow-counterclockwise"></i> Needs Revision
+                <span class="badge {{ $activeTab === 'needs_revision' ? 'badge-danger' : 'badge-navy' }}">{{ $counts['needs_revision'] }}</span>
+            </a>
             <a href="{{ route('admin.quotations.index', array_merge(request()->query(), ['tab' => 'approved'])) }}"
                class="btn btn-link {{ $activeTab === 'approved' ? 'fw-bold text-success border-bottom border-success border-2' : 'text-muted' }}"
                style="text-decoration: none; border-radius: 0; padding: 12px 14px; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 6px;">
@@ -105,6 +111,7 @@
                             <option value="">All Statuses</option>
                             <option value="draft" {{ request('status') === 'draft' ? 'selected' : '' }}>Draft</option>
                             <option value="sent" {{ request('status') === 'sent' ? 'selected' : '' }}>Sent</option>
+                            <option value="returned" {{ request('status') === 'returned' ? 'selected' : '' }}>Needs Revision</option>
                             <option value="accepted" {{ in_array(request('status'), ['accepted', 'approved']) ? 'selected' : '' }}>Approved / Accepted</option>
                             <option value="rejected" {{ request('status') === 'rejected' ? 'selected' : '' }}>Rejected</option>
                             <option value="expired" {{ request('status') === 'expired' ? 'selected' : '' }}>Expired</option>
@@ -182,22 +189,25 @@
                                 </td>
                                 <td>
                                     @php
+                                        $isNeedsRev = $qtn->status === 'returned' || str_contains($qtn->remarks ?? '', '[RETURNED FOR REVISION]');
                                         $badgeClass = match ($qtn->status) {
-                                            'draft' => 'badge-navy',
+                                            'draft' => $isNeedsRev ? 'badge-danger' : 'badge-navy',
                                             'sent' => 'badge-primary',
                                             'accepted', 'approved' => 'badge-success',
                                             'rejected' => 'badge-danger',
                                             'expired' => 'badge-warning',
                                             'converted' => 'badge-success',
+                                            'returned' => 'badge-danger',
                                             default => 'badge-navy',
                                         };
-                                        $statusLabel = match ($qtn->status) {
+                                        $statusLabel = $isNeedsRev ? 'NEEDS REVISION' : match ($qtn->status) {
                                             'accepted', 'approved' => 'APPROVED',
                                             'draft' => 'DRAFT',
                                             'sent' => 'SENT',
                                             'converted' => 'CONVERTED',
                                             'rejected' => 'REJECTED',
                                             'expired' => 'EXPIRED',
+                                            'returned' => 'NEEDS REVISION',
                                             default => strtoupper($qtn->status)
                                         };
                                     @endphp
@@ -236,6 +246,15 @@
                                                 onclick="openConvertModal({{ $qtn->id }}, '{{ $qtn->quotation_number }}', {{ $qtn->total_amount }})"
                                                 title="Convert to Finalized Sale">
                                                 <i class="bi bi-cart-check me-1"></i> Convert
+                                            </button>
+                                        @endif
+
+                                        <!-- RETURN FOR REVISION (Available even when Converted, or Approved) -->
+                                        @if ($isConverted || $isApproved)
+                                            <button type="button" class="btn btn-sm btn-outline-warning"
+                                                onclick="openReturnRevisionModal({{ $qtn->id }}, '{{ $qtn->quotation_number }}', {{ $isConverted ? 'true' : 'false' }})"
+                                                title="Return Quotation for Revision to Staff">
+                                                <i class="bi bi-arrow-counterclockwise me-1"></i> Return for Revision
                                             </button>
                                         @endif
 
@@ -722,6 +741,51 @@
         </div>
     </div>
 
+    <!-- ==================== RETURN FOR REVISION MODAL ==================== -->
+    <div id="returnRevisionModal" class="modal-overlay">
+        <div class="modal-dialog" style="max-width: 540px;">
+            <div class="modal-header" style="background: #fffbeb; border-bottom: 1px solid #fde68a;">
+                <h3 class="modal-title" style="color: #92400e; font-size: 1.15rem; font-weight: 700;">
+                    <i class="bi bi-arrow-counterclockwise me-2"></i> Return for Revision
+                </h3>
+                <button type="button" class="modal-close-btn" data-close-modal="returnRevisionModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <form id="returnRevisionForm" onsubmit="submitReturnRevision(event)">
+                @csrf
+                <input type="hidden" id="returnQuotationId" name="quotation_id">
+                <div class="modal-body">
+                    <p style="font-size: 0.95rem; margin-bottom: 12px; color: var(--color-deep-navy);">
+                        Are you sure you want to return Quotation <strong id="returnQuotationNumberText" class="text-primary"></strong> to Staff for revision?
+                    </p>
+
+                    <div id="returnConvertedAlert" style="display: none; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 0.85rem; color: #92400e;">
+                        <div style="font-weight: 700; display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                            <i class="bi bi-exclamation-triangle-fill text-warning"></i> Converted Sale Void Notice
+                        </div>
+                        This quotation was already converted into a sale. Returning it for revision will <strong>automatically void the converted sale</strong>, <strong>restore warehouse stock</strong>, and allow staff to edit or replace line items, quantities, and pricing.
+                    </div>
+
+                    <div id="returnStandardAlert" style="display: none; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 0.85rem; color: #1e40af;">
+                        <i class="bi bi-info-circle-fill me-1"></i>
+                        The quotation status will be updated to <strong>Needs Revision</strong> and unlocked for staff editing.
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="returnRevisionNotes">Revision Instructions / Reason <span class="text-danger">*</span></label>
+                        <textarea name="notes" id="returnRevisionNotes" class="form-control" rows="3" required
+                            placeholder="Specify what staff should revise (e.g., reduce kasim to 30kg, add garlic 5kg, update customer discount)..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" data-close-modal="returnRevisionModal">Cancel</button>
+                    <button type="submit" class="btn btn-warning" id="confirmReturnRevisionBtn">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> Confirm Return for Revision
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     @push('scripts')
         <script>
             const productsData = @json($products);
@@ -1051,6 +1115,59 @@
                 }
             }
 
+            // Open Return for Revision Modal
+            function openReturnRevisionModal(id, qtnNumber, isConverted) {
+                document.getElementById('returnQuotationId').value = id;
+                document.getElementById('returnQuotationNumberText').innerText = qtnNumber;
+                document.getElementById('returnRevisionNotes').value = '';
+
+                if (isConverted) {
+                    document.getElementById('returnConvertedAlert').style.display = 'block';
+                    document.getElementById('returnStandardAlert').style.display = 'none';
+                } else {
+                    document.getElementById('returnConvertedAlert').style.display = 'none';
+                    document.getElementById('returnStandardAlert').style.display = 'block';
+                }
+
+                openModal('returnRevisionModal');
+            }
+
+            // Submit Return for Revision
+            async function submitReturnRevision(e) {
+                e.preventDefault();
+                const id = document.getElementById('returnQuotationId').value;
+                const notes = document.getElementById('returnRevisionNotes').value;
+                const btn = document.getElementById('confirmReturnRevisionBtn');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Returning...';
+
+                try {
+                    const res = await fetch(`/admin/quotations/${id}/return`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ notes })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        closeModal('returnRevisionModal');
+                        showToast('success', 'Quotation Returned', data.message);
+                        setTimeout(() => location.reload(), 600);
+                    } else {
+                        showToast('error', 'Error', data.message || 'Error returning quotation.');
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i> Confirm Return for Revision';
+                    }
+                } catch (err) {
+                    showToast('error', 'Error', err.message);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i> Confirm Return for Revision';
+                }
+            }
+
             // Confirm Delete
             function confirmDeleteQuotation(id, qtnNumber) {
                 targetDeleteId = id;
@@ -1168,19 +1285,44 @@
                         `;
                     }).join('');
 
+                    const customerName = (q.customer_display_name && q.customer_display_name !== 'undefined')
+                        ? q.customer_display_name
+                        : ((q.customer && q.customer.name)
+                            ? (q.customer.name + (q.customer.business_name ? ` (${q.customer.business_name})` : ''))
+                            : (q.customer_name && q.customer_name !== 'undefined' ? q.customer_name : 'Walk-in Customer'));
+
+                    const formatModalDate = function(val) {
+                        if (!val) return 'N/A';
+                        if (typeof val === 'string' && val.length >= 10) {
+                            const datePart = val.substring(0, 10);
+                            const parts = datePart.split('-');
+                            if (parts.length === 3) {
+                                const d = new Date(parts[0], parts[1] - 1, parts[2]);
+                                if (!isNaN(d.getTime())) {
+                                    return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+                                }
+                            }
+                        }
+                        const d = new Date(val);
+                        return !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : val;
+                    };
+
+                    const formattedOrderDate = q.formatted_quotation_date || formatModalDate(q.quotation_date);
+                    const formattedValidUntil = q.formatted_valid_until || (q.valid_until ? formatModalDate(q.valid_until) : 'N/A');
+
                     document.getElementById('viewQuoteTitle').innerText = `Customer Order #${q.quotation_number}`;
                     document.getElementById('viewQuoteBody').innerHTML = `
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px;">
                             <div>
                                 <div style="font-size: 0.78rem; color: var(--text-muted);">Customer:</div>
-                                <strong>${q.customer_display_name}</strong>
-                                ${q.customer_contact ? `<div style="font-size: 0.8rem; color: var(--text-light);"><i class="bi bi-telephone"></i> ${q.customer_contact}</div>` : ''}
-                                ${q.customer_address ? `<div style="font-size: 0.8rem; color: var(--text-light);">${q.customer_address}</div>` : ''}
+                                <strong style="font-size: 1rem; color: var(--color-deep-navy);">${customerName}</strong>
+                                ${q.customer_contact ? `<div style="font-size: 0.8rem; color: var(--text-light); margin-top: 2px;"><i class="bi bi-telephone"></i> ${q.customer_contact}</div>` : ''}
+                                ${q.customer_address ? `<div style="font-size: 0.8rem; color: var(--text-light); margin-top: 2px;"><i class="bi bi-geo-alt"></i> ${q.customer_address}</div>` : ''}
                             </div>
                             <div style="text-align: right;">
                                 <div style="font-size: 0.78rem; color: var(--text-muted);">Order Date:</div>
-                                <strong>${q.quotation_date}</strong>
-                                <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 2px;">Valid Until: <strong>${q.valid_until || 'N/A'}</strong></div>
+                                <strong style="font-size: 0.95rem; color: var(--color-deep-navy);">${formattedOrderDate}</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 2px;">Valid Until: <strong>${formattedValidUntil}</strong></div>
                                 <div style="margin-top: 4px;"><span class="badge badge-primary">${q.status.toUpperCase()}</span></div>
                             </div>
                         </div>
@@ -1225,10 +1367,13 @@
                     if (q.status !== 'converted') {
                         if (['accepted', 'approved'].includes(q.status)) {
                             actionBtns += `<button type="button" class="btn btn-success btn-sm" onclick="closeModal('viewQuotationModal'); openConvertModal(${q.id}, '${q.quotation_number}', ${q.total_amount})"><i class="bi bi-cart-check me-1"></i> Convert to Sale</button>`;
-                        } else if (['draft', 'sent'].includes(q.status)) {
+                            actionBtns += `<button type="button" class="btn btn-outline-warning btn-sm" onclick="closeModal('viewQuotationModal'); openReturnRevisionModal(${q.id}, '${q.quotation_number}', false)"><i class="bi bi-arrow-counterclockwise me-1"></i> Return for Revision</button>`;
+                        } else if (['draft', 'sent', 'returned'].includes(q.status)) {
                             actionBtns += `<button type="button" class="btn btn-success btn-sm" onclick="closeModal('viewQuotationModal'); openApproveModal(${q.id}, '${q.quotation_number}')"><i class="bi bi-check-circle me-1"></i> Approve</button>`;
                         }
                         actionBtns += `<button type="button" class="btn btn-warning btn-sm" onclick="closeModal('viewQuotationModal'); openEditQuotationModal(${q.id})"><i class="bi bi-pencil me-1"></i> Edit</button>`;
+                    } else {
+                        actionBtns += `<button type="button" class="btn btn-warning btn-sm" onclick="closeModal('viewQuotationModal'); openReturnRevisionModal(${q.id}, '${q.quotation_number}', true)"><i class="bi bi-arrow-counterclockwise me-1"></i> Return for Revision</button>`;
                     }
 
                     document.getElementById('viewQuoteFooter').innerHTML = `

@@ -30,7 +30,13 @@ class QuotationController extends Controller
         $query = Quotation::with(['customer', 'preparer', 'items.product']);
 
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            if ($request->status === 'returned') {
+                $query->where(function ($q) {
+                    $q->where('status', 'returned')->orWhere('remarks', 'like', '%[RETURNED FOR REVISION]%');
+                });
+            } else {
+                $query->where('status', $request->status);
+            }
         }
 
         if ($request->filled('search')) {
@@ -228,7 +234,7 @@ class QuotationController extends Controller
             'discount_amount' => 'nullable|numeric|min:0',
             'tax_amount' => 'nullable|numeric|min:0',
             'remarks' => 'nullable|string',
-            'status' => 'nullable|in:draft,sent,accepted,approved,rejected,expired',
+            'status' => 'nullable|in:draft,sent,accepted,approved,rejected,expired,returned',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.sku' => 'required|string',

@@ -34,7 +34,11 @@ class AdminQuotationController extends Controller
         $activeTab = $request->query('tab', 'all');
 
         if ($activeTab === 'pending') {
-            $query->whereIn('status', ['draft', 'sent']);
+            $query->whereIn('status', ['draft', 'sent'])->where('status', '!=', 'returned')->where('remarks', 'not like', '%[RETURNED FOR REVISION]%');
+        } elseif ($activeTab === 'needs_revision') {
+            $query->where(function ($q) {
+                $q->where('status', 'returned')->orWhere('remarks', 'like', '%[RETURNED FOR REVISION]%');
+            });
         } elseif ($activeTab === 'approved') {
             $query->whereIn('status', ['accepted', 'approved']);
         } elseif ($activeTab === 'converted') {
@@ -69,7 +73,8 @@ class AdminQuotationController extends Controller
         // Metrics for tabs and counters
         $counts = [
             'all' => Quotation::count(),
-            'pending' => Quotation::whereIn('status', ['draft', 'sent'])->count(),
+            'pending' => Quotation::whereIn('status', ['draft', 'sent'])->where('status', '!=', 'returned')->where('remarks', 'not like', '%[RETURNED FOR REVISION]%')->count(),
+            'needs_revision' => Quotation::where('status', 'returned')->orWhere('remarks', 'like', '%[RETURNED FOR REVISION]%')->count(),
             'approved' => Quotation::whereIn('status', ['accepted', 'approved'])->count(),
             'converted' => Quotation::where('status', 'converted')->count(),
             'rejected' => Quotation::whereIn('status', ['rejected', 'expired'])->count(),
@@ -253,7 +258,7 @@ class AdminQuotationController extends Controller
             'discount_amount' => 'nullable|numeric|min:0',
             'tax_amount' => 'nullable|numeric|min:0',
             'remarks' => 'nullable|string',
-            'status' => 'nullable|in:draft,sent,accepted,approved,rejected,expired',
+            'status' => 'nullable|in:draft,sent,accepted,approved,rejected,expired,returned',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.sku' => 'required|string',
@@ -585,6 +590,80 @@ class AdminQuotationController extends Controller
                 'success' => false,
                 'message' => $e->getMessage(),
             ], 422);
+        }
+    }
+
+    /**
+     * Return quotation for revision (even if already converted to a sale)
+     */
+    public function returnForRevision(Request $request, Quotation $quotation)
+    {
+        $validated = $request->validate([
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $notes = $validated['notes'] ?? 'Quotation returned for revision by Admin';
+        $adminName = auth()->user()->name ?? 'Admin';
+
+        try {
+            DB::transaction(function () use ($quotation, $notes, $adminName) {
+                // If it was already converted to a sale, void that sale and restore stock
+                if ($quotation->converted_sale_id) {
+                    $sale = Sale::find($quotation->converted_sale_id);
+                    if ($sale && $sale->status !== 'voided') {
+                        $this->inventoryService->voidSale(
+                            $sale,
+                            "Voided: Quotation #{$quotation->quotation_number} returned for revision by Admin ({$adminName}). Instructions: {$notes}",
+                            auth()->id()
+                        );
+                    }
+                    $quotation->converted_sale_id = null;
+                    $quotation->converted_at = null;
+                }
+
+                $revisionNotice = "[RETURNED FOR REVISION by {$adminName} on " . now()->format('M d, Y h:i A') . "]: {$notes}";
+                $quotation->remarks = $quotation->remarks ? ($revisionNotice . "\n" . $quotation->remarks) : $revisionNotice;
+
+                // Try setting status to 'returned', fallback to 'draft' if DB enum constraint is present
+                try {
+                    $quotation->status = 'returned';
+                    $quotation->save();
+                } catch (\Throwable $e) {
+                    $quotation->status = 'draft';
+                    $quotation->save();
+                }
+
+                AuditLog::log(
+                    'quotation_returned_for_revision',
+                    Quotation::class,
+                    $quotation->id,
+                    null,
+                    [
+                        'quotation_number' => $quotation->quotation_number,
+                        'notes' => $notes,
+                        'admin' => $adminName,
+                    ],
+                    "Quotation #{$quotation->quotation_number} returned for revision to staff"
+                );
+            });
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Quotation #{$quotation->quotation_number} returned for revision to staff successfully!",
+                    'quotation' => $quotation->fresh(['items', 'customer']),
+                ]);
+            }
+
+            return back()->with('success', "Quotation #{$quotation->quotation_number} returned for revision to staff successfully!");
+        } catch (\Exception $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to return quotation: ' . $e->getMessage(),
+                ], 422);
+            }
+            return back()->with('error', 'Failed to return quotation: ' . $e->getMessage());
         }
     }
 

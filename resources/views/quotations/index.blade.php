@@ -14,6 +14,15 @@
             <div class="stat-helper">Customer offer records</div>
         </div>
 
+        <div class="stat-card accent-rose">
+            <div class="stat-header">
+                <span class="stat-label">Needs Revision</span>
+                <div class="stat-icon"><i class="bi bi-arrow-counterclockwise text-danger"></i></div>
+            </div>
+            <div class="stat-value">{{ \App\Models\Quotation::where('status', 'returned')->orWhere('remarks', 'like', '%[RETURNED FOR REVISION]%')->count() }}</div>
+            <div class="stat-helper">Returned by Admin for adjustments</div>
+        </div>
+
         <div class="stat-card accent-green">
             <div class="stat-header">
                 <span class="stat-label">Accepted Quotes</span>
@@ -60,6 +69,7 @@
                             <option value="">All Statuses</option>
                             <option value="draft" {{ request('status') === 'draft' ? 'selected' : '' }}>Draft</option>
                             <option value="sent" {{ request('status') === 'sent' ? 'selected' : '' }}>Sent</option>
+                            <option value="returned" {{ request('status') === 'returned' ? 'selected' : '' }}>Needs Revision</option>
                             <option value="accepted" {{ request('status') === 'accepted' ? 'selected' : '' }}>Accepted
                             </option>
                             <option value="rejected" {{ request('status') === 'rejected' ? 'selected' : '' }}>Rejected
@@ -132,17 +142,25 @@
                                 </td>
                                 <td>
                                     @php
+                                        $isNeedsRev = $qtn->status === 'returned' || str_contains($qtn->remarks ?? '', '[RETURNED FOR REVISION]');
                                         $badge = match ($qtn->status) {
-                                            'draft' => 'badge-navy',
+                                            'draft' => $isNeedsRev ? 'badge-danger' : 'badge-navy',
                                             'sent' => 'badge-primary',
                                             'accepted' => 'badge-success',
                                             'rejected' => 'badge-danger',
                                             'expired' => 'badge-warning',
                                             'converted' => 'badge-success',
+                                            'returned' => 'badge-danger',
                                             default => 'badge-navy',
                                         };
+                                        $badgeLabel = $isNeedsRev ? 'NEEDS REVISION' : strtoupper($qtn->status);
                                     @endphp
-                                    <span class="badge {{ $badge }}">{{ strtoupper($qtn->status) }}</span>
+                                    <span class="badge {{ $badge }}">{{ $badgeLabel }}</span>
+                                    @if ($isNeedsRev)
+                                        <div style="font-size: 0.72rem; color: #dc2626; font-weight: 600; margin-top: 2px;">
+                                            <i class="bi bi-exclamation-circle me-1"></i> Action Required
+                                        </div>
+                                    @endif
                                     @if ($qtn->status === 'converted' && $qtn->convertedSale)
                                         <div style="font-size: 0.72rem; margin-top: 2px;">
                                             <span class="text-muted">Sale:
@@ -154,11 +172,20 @@
                                     {{ $qtn->preparer->name ?? 'System' }}
                                 </td>
                                 <td style="text-align: right;">
-                                    <div style="display: inline-flex; gap: 4px; align-items: center;">
+                                    <div style="display: inline-flex; gap: 4px; align-items: center; justify-content: flex-end; flex-wrap: wrap;">
                                         <button type="button" class="btn btn-sm btn-secondary"
                                             onclick="viewQuotationDetails({{ $qtn->id }})" title="View Details">
                                             <i class="bi bi-eye"></i>
                                         </button>
+
+                                        <!-- Edit / Revise Button for Staff -->
+                                        @if ($qtn->status !== 'converted')
+                                            <button type="button" class="btn btn-sm btn-warning"
+                                                onclick="openEditQuotationModal({{ $qtn->id }})"
+                                                title="Revise Quotation Items & Info">
+                                                <i class="bi bi-pencil me-1"></i> Revise
+                                            </button>
+                                        @endif
 
                                         <!-- Print Actions -->
                                         <a href="{{ route('quotations.print', ['quotation' => $qtn->id, 'with_price' => 1]) }}"
@@ -234,7 +261,7 @@
                         <div class="form-group">
                             <label class="form-label" for="quoteCustomerSelect">Select Registered Customer</label>
                             <select name="customer_id" id="quoteCustomerSelect" class="form-select"
-                                onchange="onCustomerSelectChange(this)">
+                                onchange="onCustomerSelectChange(this, 'create')">
                                 <option value="">-- Walk-in / Custom Customer --</option>
                                 @foreach ($customers as $c)
                                     <option value="{{ $c->id }}" data-contact="{{ $c->contact_number }}"
@@ -279,7 +306,7 @@
                         <span style="font-weight: 700; color: var(--color-deep-navy); font-size: 0.9rem;">
                             <i class="bi bi-box-seam me-1 text-primary"></i> Quoted Line Items
                         </span>
-                        <button type="button" class="btn btn-sm btn-outline" onclick="addQuotationRow()">
+                        <button type="button" class="btn btn-sm btn-outline" onclick="addQuotationRow('create')">
                             <i class="bi bi-plus-circle me-1"></i> Add Item Line
                         </button>
                     </div>
@@ -299,7 +326,7 @@
                                     <th style="padding: 10px; width: 5%; text-align: center;">Action</th>
                                 </tr>
                             </thead>
-                            <tbody id="quotationRowsContainer">
+                            <tbody id="createQuotationRowsContainer">
                                 <!-- Populated dynamically -->
                             </tbody>
                         </table>
@@ -316,28 +343,28 @@
                             <div
                                 style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px;">
                                 <span style="color: var(--text-muted);">Subtotal:</span>
-                                <strong id="quoteSubtotalDisplay">₱0.00</strong>
+                                <strong id="createSubtotalDisplay">₱0.00</strong>
                             </div>
                             <div
                                 style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; margin-bottom: 6px;">
                                 <span style="color: var(--text-muted);">Overall Discount:</span>
-                                <input type="number" name="discount_amount" id="quoteDiscountInput"
+                                <input type="number" name="discount_amount" id="createDiscountInput"
                                     class="form-control form-control-sm" style="width: 110px; text-align: right;"
                                     value="0" min="0" step="0.01"
-                                    oninput="calculateQuotationGrandTotal()">
+                                    oninput="calculateQuotationGrandTotal('create')">
                             </div>
                             <div
                                 style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; margin-bottom: 8px;">
                                 <span style="color: var(--text-muted);">Tax Amount:</span>
-                                <input type="number" name="tax_amount" id="quoteTaxInput"
+                                <input type="number" name="tax_amount" id="createTaxInput"
                                     class="form-control form-control-sm" style="width: 110px; text-align: right;"
                                     value="0" min="0" step="0.01"
-                                    oninput="calculateQuotationGrandTotal()">
+                                    oninput="calculateQuotationGrandTotal('create')">
                             </div>
                             <div
                                 style="display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: 800; border-top: 2px solid #cbd5e1; padding-top: 8px;">
                                 <span>Grand Total:</span>
-                                <span style="color: var(--color-primary-blue);" id="quoteGrandTotalDisplay">₱0.00</span>
+                                <span style="color: var(--color-primary-blue);" id="createGrandTotalDisplay">₱0.00</span>
                             </div>
                         </div>
                     </div>
@@ -347,6 +374,140 @@
                         data-close-modal="createQuotationModal">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="saveQuotationBtn">
                         <i class="bi bi-check-lg me-1"></i> Save & Generate Quotation
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== EDIT / REVISE QUOTATION MODAL ==================== -->
+    <div id="editQuotationModal" class="modal-overlay">
+        <div class="modal-dialog modal-xl" style="max-width: 1050px;">
+            <div class="modal-header" style="background: #fffbeb; border-bottom: 1px solid #fde68a;">
+                <h3 class="modal-title" style="color: #92400e; font-weight: 700;">
+                    <i class="bi bi-pencil-square me-2 text-warning"></i> Revise Quotation <span id="editQuoteNumberTitle" class="text-primary"></span>
+                </h3>
+                <button type="button" class="modal-close-btn" data-close-modal="editQuotationModal"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <form id="editQuotationForm" onsubmit="submitEditQuotation(event)">
+                @csrf
+                @method('PUT')
+                <input type="hidden" id="editQuotationId" name="quotation_id">
+                <div class="modal-body">
+                    <!-- Revision Notice from Admin Alert -->
+                    <div id="editRevisionNoticeAlert" style="display: none; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px; margin-bottom: 14px; font-size: 0.85rem; color: #92400e;">
+                        <div style="font-weight: 700; display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                            <i class="bi bi-exclamation-triangle-fill text-warning"></i> Revision Instructions from Admin:
+                        </div>
+                        <div id="editRevisionNoticeContent" style="white-space: pre-wrap; font-size: 0.85rem; color: #78350f;"></div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+                        <div class="form-group">
+                            <label class="form-label" for="editQuoteCustomerSelect">Select Registered Customer</label>
+                            <select name="customer_id" id="editQuoteCustomerSelect" class="form-select" onchange="onCustomerSelectChange(this, 'edit')">
+                                <option value="">-- Walk-in / Custom Customer --</option>
+                                @foreach ($customers as $c)
+                                    <option value="{{ $c->id }}" data-contact="{{ $c->contact_number }}" data-address="{{ $c->address }}">
+                                        {{ $c->name }} {{ $c->business_name ? "({$c->business_name})" : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="editQuoteCustomerName">Customer / Business Name</label>
+                            <input type="text" name="customer_name" id="editQuoteCustomerName" class="form-control" placeholder="Enter name if walk-in">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="editQuoteCustomerContact">Contact Number</label>
+                            <input type="text" name="customer_contact" id="editQuoteCustomerContact" class="form-control" placeholder="Mobile / Phone">
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+                        <div class="form-group">
+                            <label class="form-label" for="editQuoteCustomerAddress">Delivery / Billing Address</label>
+                            <input type="text" name="customer_address" id="editQuoteCustomerAddress" class="form-control" placeholder="Customer address">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="editQuoteDate">Quotation Date <span class="text-danger">*</span></label>
+                            <input type="date" name="quotation_date" id="editQuoteDate" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="editQuoteValidUntil">Valid Until</label>
+                            <input type="date" name="valid_until" id="editQuoteValidUntil" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="editQuoteStatus">Status</label>
+                            <select name="status" id="editQuoteStatus" class="form-select">
+                                <option value="sent">Sent (Submit for Admin Approval)</option>
+                                <option value="draft">Draft (Work in Progress)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 700; color: var(--color-deep-navy); font-size: 0.9rem;">
+                            <i class="bi bi-box-seam me-1 text-primary"></i> Quoted Line Items (Add / Edit / Remove Items)
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline" onclick="addQuotationRow('edit')">
+                            <i class="bi bi-plus-circle me-1"></i> Add Item Line
+                        </button>
+                    </div>
+
+                    <div class="table-responsive" style="border: 1px solid var(--card-border); border-radius: 8px; margin-bottom: 16px;">
+                        <table class="table mb-0" style="width: 100%;">
+                            <thead style="background: var(--color-mist-blue); font-size: 0.8rem; text-transform: uppercase;">
+                                <tr>
+                                    <th style="padding: 10px; width: 35%;">SKU / Product Description</th>
+                                    <th style="padding: 10px; width: 15%;">Unit</th>
+                                    <th style="padding: 10px; width: 12%;">Qty</th>
+                                    <th style="padding: 10px; width: 15%;">Unit Selling Price</th>
+                                    <th style="padding: 10px; width: 10%;">Discount</th>
+                                    <th style="padding: 10px; width: 13%;">Subtotal</th>
+                                    <th style="padding: 10px; width: 5%; text-align: center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="editQuotationRowsContainer">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 16px;">
+                        <div class="form-group">
+                            <label class="form-label" for="editQuoteRemarks">Terms & Remarks / Notes</label>
+                            <textarea name="remarks" id="editQuoteRemarks" class="form-control" rows="3"
+                                placeholder="Terms, revision details, or notes..."></textarea>
+                        </div>
+                        <div style="background: var(--color-mist-blue); border: 1px solid var(--card-border); border-radius: 8px; padding: 14px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px;">
+                                <span style="color: var(--text-muted);">Subtotal:</span>
+                                <strong id="editSubtotalDisplay">₱0.00</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; margin-bottom: 6px;">
+                                <span style="color: var(--text-muted);">Overall Discount:</span>
+                                <input type="number" name="discount_amount" id="editDiscountInput"
+                                    class="form-control form-control-sm" style="width: 110px; text-align: right;"
+                                    value="0" min="0" step="0.01" oninput="calculateQuotationGrandTotal('edit')">
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; margin-bottom: 8px;">
+                                <span style="color: var(--text-muted);">Tax Amount:</span>
+                                <input type="number" name="tax_amount" id="editTaxInput"
+                                    class="form-control form-control-sm" style="width: 110px; text-align: right;"
+                                    value="0" min="0" step="0.01" oninput="calculateQuotationGrandTotal('edit')">
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: 800; border-top: 2px solid #cbd5e1; padding-top: 8px;">
+                                <span>Grand Total:</span>
+                                <span style="color: var(--color-primary-blue);" id="editGrandTotalDisplay">₱0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" data-close-modal="editQuotationModal">Cancel</button>
+                    <button type="submit" class="btn btn-warning" id="saveEditQuotationBtn">
+                        <i class="bi bi-save me-1"></i> Save Revised Quotation
                     </button>
                 </div>
             </form>
@@ -477,117 +638,137 @@
     @push('scripts')
         <script>
             const productsData = @json($products);
-            let rowIndex = 0;
+            let createRowIdx = 0;
+            let editRowIdx = 0;
 
             function openCreateQuotationModal() {
                 document.getElementById('createQuotationForm').reset();
-                document.getElementById('quotationRowsContainer').innerHTML = '';
-                rowIndex = 0;
-                addQuotationRow();
-                calculateQuotationGrandTotal();
+                document.getElementById('createQuotationRowsContainer').innerHTML = '';
+                createRowIdx = 0;
+                addQuotationRow('create');
+                calculateQuotationGrandTotal('create');
                 openModal('createQuotationModal');
             }
 
-            function onCustomerSelectChange(select) {
+            function onCustomerSelectChange(select, prefix = 'create') {
                 const opt = select.options[select.selectedIndex];
+                const nameId = prefix === 'create' ? 'quoteCustomerName' : 'editQuoteCustomerName';
+                const contactId = prefix === 'create' ? 'quoteCustomerContact' : 'editQuoteCustomerContact';
+                const addressId = prefix === 'create' ? 'quoteCustomerAddress' : 'editQuoteCustomerAddress';
+
                 if (select.value) {
-                    document.getElementById('quoteCustomerName').value = opt.text.trim();
-                    document.getElementById('quoteCustomerContact').value = opt.getAttribute('data-contact') || '';
-                    document.getElementById('quoteCustomerAddress').value = opt.getAttribute('data-address') || '';
+                    document.getElementById(nameId).value = opt.text.trim();
+                    document.getElementById(contactId).value = opt.getAttribute('data-contact') || '';
+                    document.getElementById(addressId).value = opt.getAttribute('data-address') || '';
                 }
             }
 
-            function addQuotationRow() {
-                const idx = rowIndex++;
+            function addQuotationRow(prefix = 'create', existingItem = null) {
+                const idx = (prefix === 'create') ? createRowIdx++ : editRowIdx++;
+                const containerId = (prefix === 'create') ? 'createQuotationRowsContainer' : 'editQuotationRowsContainer';
+                const container = document.getElementById(containerId);
+                if (!container) return;
+
                 const tr = document.createElement('tr');
-                tr.id = `qrow_${idx}`;
+                tr.id = `${prefix}_qrow_${idx}`;
                 tr.innerHTML = `
-        <td style="padding: 8px 10px;">
-            <select class="form-select form-select-sm" data-row="${idx}" onchange="onProductSelect(${idx}, this)" required>
-                <option value="">-- Choose Product SKU --</option>
-                ${productsData.map(p => `<option value="${p.id}" data-sku="${p.sku}" data-name="${p.name}" data-srp="${p.default_srp}" data-baseunit="${p.base_unit}">${p.sku} - ${p.name}</option>`).join('')}
-            </select>
-            <input type="hidden" name="items[${idx}][product_id]" id="p_id_${idx}">
-            <input type="hidden" name="items[${idx}][sku]" id="p_sku_${idx}">
-            <input type="hidden" name="items[${idx}][description]" id="p_desc_${idx}">
-            <input type="hidden" name="items[${idx}][conversion_factor]" id="p_conv_${idx}" value="1">
-        </td>
-        <td style="padding: 8px 10px;">
-            <select name="items[${idx}][unit_name]" id="p_unit_${idx}" class="form-select form-select-sm" onchange="onUnitChange(${idx}, this)" required>
-                <option value="Base Unit">Base Unit</option>
-            </select>
-        </td>
-        <td style="padding: 8px 10px;">
-            <input type="number" name="items[${idx}][quantity]" id="p_qty_${idx}" class="form-control form-control-sm text-center" value="1" min="0.001" step="any" oninput="calculateRowTotal(${idx})" required>
-        </td>
-        <td style="padding: 8px 10px;">
-            <input type="number" name="items[${idx}][unit_price]" id="p_price_${idx}" class="form-control form-control-sm text-end" value="0.00" min="0" step="0.01" oninput="calculateRowTotal(${idx})" required>
-        </td>
-        <td style="padding: 8px 10px;">
-            <input type="number" name="items[${idx}][discount]" id="p_disc_${idx}" class="form-control form-control-sm text-end" value="0" min="0" step="0.01" oninput="calculateRowTotal(${idx})">
-        </td>
-        <td style="padding: 8px 10px;">
-            <strong class="d-block text-end" id="p_subtotal_${idx}">₱0.00</strong>
-        </td>
-        <td style="padding: 8px 10px; text-align: center;">
-            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeQuotationRow(${idx})">
-                <i class="bi bi-trash"></i>
-            </button>
-        </td>
-    `;
-                document.getElementById('quotationRowsContainer').appendChild(tr);
+                    <td style="padding: 8px 10px;">
+                        <select class="form-select form-select-sm" id="${prefix}_p_select_${idx}" onchange="onProductSelect('${prefix}', ${idx}, this)" required>
+                            <option value="">-- Choose Product SKU --</option>
+                            ${productsData.map(p => `<option value="${p.id}" data-sku="${p.sku}" data-name="${p.name}" data-srp="${p.default_srp}" data-baseunit="${p.base_unit}">${p.sku} - ${p.name}</option>`).join('')}
+                        </select>
+                        <input type="hidden" name="items[${idx}][product_id]" id="${prefix}_p_id_${idx}">
+                        <input type="hidden" name="items[${idx}][sku]" id="${prefix}_p_sku_${idx}">
+                        <input type="hidden" name="items[${idx}][description]" id="${prefix}_p_desc_${idx}">
+                        <input type="hidden" name="items[${idx}][conversion_factor]" id="${prefix}_p_conv_${idx}" value="1">
+                    </td>
+                    <td style="padding: 8px 10px;">
+                        <select name="items[${idx}][unit_name]" id="${prefix}_p_unit_${idx}" class="form-select form-select-sm" onchange="onUnitChange('${prefix}', ${idx}, this)" required>
+                            <option value="Base Unit">Base Unit</option>
+                        </select>
+                    </td>
+                    <td style="padding: 8px 10px;">
+                        <input type="number" name="items[${idx}][quantity]" id="${prefix}_p_qty_${idx}" class="form-control form-control-sm text-center" value="1" min="0.001" step="any" oninput="calculateRowTotal('${prefix}', ${idx})" required>
+                    </td>
+                    <td style="padding: 8px 10px;">
+                        <input type="number" name="items[${idx}][unit_price]" id="${prefix}_p_price_${idx}" class="form-control form-control-sm text-end" value="0.00" min="0" step="0.01" oninput="calculateRowTotal('${prefix}', ${idx})" required>
+                    </td>
+                    <td style="padding: 8px 10px;">
+                        <input type="number" name="items[${idx}][discount]" id="${prefix}_p_disc_${idx}" class="form-control form-control-sm text-end" value="0" min="0" step="0.01" oninput="calculateRowTotal('${prefix}', ${idx})">
+                    </td>
+                    <td style="padding: 8px 10px;">
+                        <strong class="d-block text-end" id="${prefix}_p_subtotal_${idx}" data-val="0">₱0.00</strong>
+                    </td>
+                    <td style="padding: 8px 10px; text-align: center;">
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeQuotationRow('${prefix}', ${idx})" title="Remove Item">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                `;
+                container.appendChild(tr);
+
+                if (existingItem) {
+                    const sel = document.getElementById(`${prefix}_p_select_${idx}`);
+                    sel.value = existingItem.product_id;
+                    onProductSelect(prefix, idx, sel);
+
+                    document.getElementById(`${prefix}_p_unit_${idx}`).value = existingItem.unit_name;
+                    document.getElementById(`${prefix}_p_conv_${idx}`).value = existingItem.conversion_factor || 1;
+                    document.getElementById(`${prefix}_p_qty_${idx}`).value = existingItem.quantity;
+                    document.getElementById(`${prefix}_p_price_${idx}`).value = parseFloat(existingItem.unit_price).toFixed(2);
+                    document.getElementById(`${prefix}_p_disc_${idx}`).value = parseFloat(existingItem.discount || 0).toFixed(2);
+                    calculateRowTotal(prefix, idx);
+                }
             }
 
-            function removeQuotationRow(idx) {
-                document.getElementById(`qrow_${idx}`)?.remove();
-                calculateQuotationGrandTotal();
+            function removeQuotationRow(prefix, idx) {
+                document.getElementById(`${prefix}_qrow_${idx}`)?.remove();
+                calculateQuotationGrandTotal(prefix);
             }
 
-            function onProductSelect(idx, select) {
+            function onProductSelect(prefix, idx, select) {
                 const prodId = select.value;
                 if (!prodId) return;
                 const prod = productsData.find(p => p.id == prodId);
                 if (!prod) return;
 
-                document.getElementById(`p_id_${idx}`).value = prod.id;
-                document.getElementById(`p_sku_${idx}`).value = prod.sku;
-                document.getElementById(`p_desc_${idx}`).value = prod.name;
-                document.getElementById(`p_price_${idx}`).value = parseFloat(prod.default_srp).toFixed(2);
-                document.getElementById(`p_conv_${idx}`).value = 1;
+                document.getElementById(`${prefix}_p_id_${idx}`).value = prod.id;
+                document.getElementById(`${prefix}_p_sku_${idx}`).value = prod.sku;
+                document.getElementById(`${prefix}_p_desc_${idx}`).value = prod.name;
+                document.getElementById(`${prefix}_p_price_${idx}`).value = parseFloat(prod.default_srp).toFixed(2);
+                document.getElementById(`${prefix}_p_conv_${idx}`).value = 1;
 
-                const unitSelect = document.getElementById(`p_unit_${idx}`);
-                unitSelect.innerHTML =
-                    `<option value="${prod.base_unit}" data-factor="1" data-srp="${prod.default_srp}">${prod.base_unit} (Base)</option>`;
+                const unitSelect = document.getElementById(`${prefix}_p_unit_${idx}`);
+                unitSelect.innerHTML = `<option value="${prod.base_unit}" data-factor="1" data-srp="${prod.default_srp}">${prod.base_unit} (Base)</option>`;
 
                 if (prod.units && prod.units.length > 0) {
                     prod.units.forEach(u => {
-                        unitSelect.innerHTML +=
-                            `<option value="${u.unit_name}" data-factor="${u.conversion_factor}" data-srp="${u.srp}">${u.unit_name} (x${u.conversion_factor})</option>`;
+                        unitSelect.innerHTML += `<option value="${u.unit_name}" data-factor="${u.conversion_factor}" data-srp="${u.srp}">${u.unit_name} (x${u.conversion_factor})</option>`;
                     });
                 }
 
-                calculateRowTotal(idx);
+                calculateRowTotal(prefix, idx);
             }
 
-            function onUnitChange(idx, select) {
+            function onUnitChange(prefix, idx, select) {
                 const opt = select.options[select.selectedIndex];
                 const factor = opt.getAttribute('data-factor') || 1;
                 const srp = opt.getAttribute('data-srp');
 
-                document.getElementById(`p_conv_${idx}`).value = factor;
+                document.getElementById(`${prefix}_p_conv_${idx}`).value = factor;
                 if (srp && parseFloat(srp) > 0) {
-                    document.getElementById(`p_price_${idx}`).value = parseFloat(srp).toFixed(2);
+                    document.getElementById(`${prefix}_p_price_${idx}`).value = parseFloat(srp).toFixed(2);
                 }
-                calculateRowTotal(idx);
+                calculateRowTotal(prefix, idx);
             }
 
-            function calculateRowTotal(idx) {
-                const qty = parseFloat(document.getElementById(`p_qty_${idx}`)?.value || 0);
-                const price = parseFloat(document.getElementById(`p_price_${idx}`)?.value || 0);
-                const disc = parseFloat(document.getElementById(`p_disc_${idx}`)?.value || 0);
+            function calculateRowTotal(prefix, idx) {
+                const qty = parseFloat(document.getElementById(`${prefix}_p_qty_${idx}`)?.value || 0);
+                const price = parseFloat(document.getElementById(`${prefix}_p_price_${idx}`)?.value || 0);
+                const disc = parseFloat(document.getElementById(`${prefix}_p_disc_${idx}`)?.value || 0);
 
                 const subtotal = Math.max(0, (qty * price) - disc);
-                const subtotalDisplay = document.getElementById(`p_subtotal_${idx}`);
+                const subtotalDisplay = document.getElementById(`${prefix}_p_subtotal_${idx}`);
                 if (subtotalDisplay) {
                     subtotalDisplay.innerText = '₱' + subtotal.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
@@ -596,30 +777,42 @@
                     subtotalDisplay.setAttribute('data-val', subtotal);
                 }
 
-                calculateQuotationGrandTotal();
+                calculateQuotationGrandTotal(prefix);
             }
 
-            function calculateQuotationGrandTotal() {
+            function calculateQuotationGrandTotal(prefix = 'create') {
                 let subtotal = 0;
-                document.querySelectorAll('[id^="p_subtotal_"]').forEach(el => {
+                document.querySelectorAll(`[id^="${prefix}_p_subtotal_"]`).forEach(el => {
                     subtotal += parseFloat(el.getAttribute('data-val') || 0);
                 });
 
-                document.getElementById('quoteSubtotalDisplay').innerText = '₱' + subtotal.toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                });
+                const subDisplayId = prefix === 'create' ? 'createSubtotalDisplay' : 'editSubtotalDisplay';
+                const discInputId = prefix === 'create' ? 'createDiscountInput' : 'editDiscountInput';
+                const taxInputId = prefix === 'create' ? 'createTaxInput' : 'editTaxInput';
+                const grandDisplayId = prefix === 'create' ? 'createGrandTotalDisplay' : 'editGrandTotalDisplay';
 
-                const overallDiscount = parseFloat(document.getElementById('quoteDiscountInput')?.value || 0);
-                const overallTax = parseFloat(document.getElementById('quoteTaxInput')?.value || 0);
+                const subDisplay = document.getElementById(subDisplayId);
+                if (subDisplay) {
+                    subDisplay.innerText = '₱' + subtotal.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+                }
+
+                const overallDiscount = parseFloat(document.getElementById(discInputId)?.value || 0);
+                const overallTax = parseFloat(document.getElementById(taxInputId)?.value || 0);
                 const grandTotal = Math.max(0, subtotal - overallDiscount + overallTax);
 
-                document.getElementById('quoteGrandTotalDisplay').innerText = '₱' + grandTotal.toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                });
+                const grandDisplay = document.getElementById(grandDisplayId);
+                if (grandDisplay) {
+                    grandDisplay.innerText = '₱' + grandTotal.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+                }
             }
 
+            // Create Quotation Submit
             async function submitQuotation(e) {
                 e.preventDefault();
                 const btn = document.getElementById('saveQuotationBtn');
@@ -633,8 +826,7 @@
                     const res = await fetch("{{ route('quotations.store') }}", {
                         method: 'POST',
                         headers: {
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute(
-                                'content'),
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                             'Accept': 'application/json'
                         },
                         body: formData
@@ -653,6 +845,97 @@
                     showToast('error', 'Error', err.message);
                     btn.disabled = false;
                     btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Save & Generate Quotation';
+                }
+            }
+
+            // Open Edit Quotation Modal (Staff Revision)
+            async function openEditQuotationModal(id) {
+                try {
+                    const res = await fetch(`/quotations/${id}`, {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const json = await res.json();
+                    if (!json.success) {
+                        showToast('error', 'Error', 'Failed to load quotation details.');
+                        return;
+                    }
+
+                    const q = json.quotation;
+                    document.getElementById('editQuotationId').value = q.id;
+                    document.getElementById('editQuoteNumberTitle').innerText = `#${q.quotation_number}`;
+                    document.getElementById('editQuoteCustomerSelect').value = q.customer_id || '';
+                    document.getElementById('editQuoteCustomerName').value = q.customer_name || '';
+                    document.getElementById('editQuoteCustomerContact').value = q.customer_contact || q.customer_phone || '';
+                    document.getElementById('editQuoteCustomerAddress').value = q.customer_address || '';
+                    document.getElementById('editQuoteDate').value = q.quotation_date ? q.quotation_date.substring(0, 10) : '';
+                    document.getElementById('editQuoteValidUntil').value = q.valid_until ? q.valid_until.substring(0, 10) : '';
+                    document.getElementById('editQuoteStatus').value = (q.status === 'returned') ? 'sent' : q.status;
+                    document.getElementById('editQuoteRemarks').value = q.remarks || '';
+                    document.getElementById('editDiscountInput').value = parseFloat(q.discount_amount || 0).toFixed(2);
+                    document.getElementById('editTaxInput').value = parseFloat(q.tax_amount || 0).toFixed(2);
+
+                    // If returned for revision, show notice
+                    const revAlert = document.getElementById('editRevisionNoticeAlert');
+                    const revContent = document.getElementById('editRevisionNoticeContent');
+                    if (q.remarks && q.remarks.includes('[RETURNED FOR REVISION')) {
+                        revAlert.style.display = 'block';
+                        revContent.innerText = q.remarks;
+                    } else {
+                        revAlert.style.display = 'none';
+                    }
+
+                    // Populate line items
+                    document.getElementById('editQuotationRowsContainer').innerHTML = '';
+                    editRowIdx = 0;
+                    if (q.items && q.items.length > 0) {
+                        q.items.forEach(item => {
+                            addQuotationRow('edit', item);
+                        });
+                    } else {
+                        addQuotationRow('edit');
+                    }
+
+                    calculateQuotationGrandTotal('edit');
+                    openModal('editQuotationModal');
+                } catch (err) {
+                    showToast('error', 'Error', err.message);
+                }
+            }
+
+            // Submit Edit Quotation (Staff Revision)
+            async function submitEditQuotation(e) {
+                e.preventDefault();
+                const id = document.getElementById('editQuotationId').value;
+                const btn = document.getElementById('saveEditQuotationBtn');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving Revision...';
+
+                const form = document.getElementById('editQuotationForm');
+                const formData = new FormData(form);
+
+                try {
+                    const res = await fetch(`/quotations/${id}`, {
+                        method: 'POST', // with _method: PUT inside form
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            'Accept': 'application/json'
+                        },
+                        body: formData
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        closeModal('editQuotationModal');
+                        showToast('success', 'Quotation Revised', data.message || 'Quotation updated successfully!');
+                        setTimeout(() => location.reload(), 600);
+                    } else {
+                        showToast('error', 'Error', data.message || 'Error updating quotation.');
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-save me-1"></i> Save Revised Quotation';
+                    }
+                } catch (err) {
+                    showToast('error', 'Error', err.message);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-save me-1"></i> Save Revised Quotation';
                 }
             }
 
@@ -709,19 +992,44 @@
                         `;
                     }).join('');
 
+                    const customerName = (q.customer_display_name && q.customer_display_name !== 'undefined')
+                        ? q.customer_display_name
+                        : ((q.customer && q.customer.name)
+                            ? (q.customer.name + (q.customer.business_name ? ` (${q.customer.business_name})` : ''))
+                            : (q.customer_name && q.customer_name !== 'undefined' ? q.customer_name : 'Walk-in Customer'));
+
+                    const formatModalDate = function(val) {
+                        if (!val) return 'N/A';
+                        if (typeof val === 'string' && val.length >= 10) {
+                            const datePart = val.substring(0, 10);
+                            const parts = datePart.split('-');
+                            if (parts.length === 3) {
+                                const d = new Date(parts[0], parts[1] - 1, parts[2]);
+                                if (!isNaN(d.getTime())) {
+                                    return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+                                }
+                            }
+                        }
+                        const d = new Date(val);
+                        return !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : val;
+                    };
+
+                    const formattedOrderDate = q.formatted_quotation_date || formatModalDate(q.quotation_date);
+                    const formattedValidUntil = q.formatted_valid_until || (q.valid_until ? formatModalDate(q.valid_until) : 'N/A');
+
                     document.getElementById('viewQuoteTitle').innerText = `Customer Order #${q.quotation_number}`;
                     document.getElementById('viewQuoteBody').innerHTML = `
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px;">
                             <div>
                                 <div style="font-size: 0.78rem; color: var(--text-muted);">Customer:</div>
-                                <strong>${q.customer_display_name}</strong>
-                                ${q.customer_contact ? `<div style="font-size: 0.8rem; color: var(--text-light);"><i class="bi bi-telephone"></i> ${q.customer_contact}</div>` : ''}
-                                ${q.customer_address ? `<div style="font-size: 0.8rem; color: var(--text-light);">${q.customer_address}</div>` : ''}
+                                <strong style="font-size: 1rem; color: var(--color-deep-navy);">${customerName}</strong>
+                                ${q.customer_contact ? `<div style="font-size: 0.8rem; color: var(--text-light); margin-top: 2px;"><i class="bi bi-telephone"></i> ${q.customer_contact}</div>` : ''}
+                                ${q.customer_address ? `<div style="font-size: 0.8rem; color: var(--text-light); margin-top: 2px;"><i class="bi bi-geo-alt"></i> ${q.customer_address}</div>` : ''}
                             </div>
                             <div style="text-align: right;">
                                 <div style="font-size: 0.78rem; color: var(--text-muted);">Order Date:</div>
-                                <strong>${q.quotation_date}</strong>
-                                <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 2px;">Valid Until: <strong>${q.valid_until || 'N/A'}</strong></div>
+                                <strong style="font-size: 0.95rem; color: var(--color-deep-navy);">${formattedOrderDate}</strong>
+                                <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 2px;">Valid Until: <strong>${formattedValidUntil}</strong></div>
                                 <div style="margin-top: 4px;"><span class="badge badge-primary">${q.status.toUpperCase()}</span></div>
                             </div>
                         </div>
@@ -762,15 +1070,16 @@
                         </div>
                     `;
 
-                    let convertBtn = '';
+                    let actionBtns = '';
                     if (q.status !== 'converted') {
-                        convertBtn = `<button type="button" class="btn btn-success btn-sm" onclick="closeModal('viewQuotationModal'); openConvertModal(${q.id}, '${q.quotation_number}', ${q.total_amount})"><i class="bi bi-cart-check me-1"></i> Convert to Sale</button>`;
+                        actionBtns += `<button type="button" class="btn btn-warning btn-sm" onclick="closeModal('viewQuotationModal'); openEditQuotationModal(${q.id})"><i class="bi bi-pencil me-1"></i> Revise / Edit</button>`;
+                        actionBtns += `<button type="button" class="btn btn-success btn-sm" onclick="closeModal('viewQuotationModal'); openConvertModal(${q.id}, '${q.quotation_number}', ${q.total_amount})"><i class="bi bi-cart-check me-1"></i> Convert to Sale</button>`;
                     }
 
                     document.getElementById('viewQuoteFooter').innerHTML = `
                         <a href="/quotations/${q.id}/print?with_price=1" target="_blank" class="btn btn-outline btn-sm"><i class="bi bi-printer text-success me-1"></i> Print With Price</a>
                         <a href="/quotations/${q.id}/print?no_price=1" target="_blank" class="btn btn-outline btn-sm"><i class="bi bi-printer text-muted me-1"></i> Print Without Price</a>
-                        ${convertBtn}
+                        ${actionBtns}
                         <button type="button" class="btn btn-secondary btn-sm" data-close-modal="viewQuotationModal">Close</button>
                     `;
                 } catch (e) {

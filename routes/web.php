@@ -62,6 +62,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/quotations/{quotation}/reject', [QuotationController::class, 'reject'])->name('quotations.reject');
     Route::put('/quotations/{quotation}/status', [QuotationController::class, 'updateStatus'])->name('quotations.status');
     Route::post('/quotations/{quotation}/convert', [QuotationController::class, 'convertToSale'])->name('quotations.convert');
+    Route::post('/quotations/{quotation}/return', [AdminQuotationController::class, 'returnForRevision'])->name('quotations.return.shared');
     Route::delete('/quotations/{quotation}', [QuotationController::class, 'destroy'])->name('quotations.destroy');
 });
 
@@ -107,6 +108,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/quotations/{quotation}/reject', [AdminQuotationController::class, 'reject'])->name('quotations.reject');
     Route::put('/quotations/{quotation}/status', [AdminQuotationController::class, 'updateStatus'])->name('quotations.status');
     Route::post('/quotations/{quotation}/convert', [AdminQuotationController::class, 'convertToSale'])->name('quotations.convert');
+    Route::post('/quotations/{quotation}/return', [AdminQuotationController::class, 'returnForRevision'])->name('quotations.return');
     Route::delete('/quotations/{quotation}', [AdminQuotationController::class, 'destroy'])->name('quotations.destroy');
 
     // Purchase Requests (PR Approval & Multi-Supplier PO Splitting)

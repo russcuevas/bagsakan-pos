@@ -73,6 +73,33 @@ class Quotation extends Model
         'converted_at' => 'datetime',
     ];
 
+    protected $appends = [
+        'customer_display_name',
+        'formatted_quotation_date',
+        'formatted_valid_until',
+        'is_returned',
+    ];
+
+    public function isReturned(): bool
+    {
+        return $this->status === 'returned' || str_contains($this->remarks ?? '', '[RETURNED FOR REVISION]');
+    }
+
+    public function getIsReturnedAttribute(): bool
+    {
+        return $this->isReturned();
+    }
+
+    public function getFormattedQuotationDateAttribute(): string
+    {
+        return $this->quotation_date ? \Carbon\Carbon::parse($this->quotation_date)->format('M d, Y') : 'N/A';
+    }
+
+    public function getFormattedValidUntilAttribute(): string
+    {
+        return $this->valid_until ? \Carbon\Carbon::parse($this->valid_until)->format('M d, Y') : 'N/A';
+    }
+
     public function customer()
     {
         return $this->belongsTo(Customer::class);
