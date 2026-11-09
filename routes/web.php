@@ -23,10 +23,12 @@ use App\Http\Controllers\Cashier\CashierSalesHistoryController;
 use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\Staff\StaffDashboardController;
 use App\Http\Controllers\Staff\StaffInventoryController;
+use App\Http\Controllers\Staff\StaffProductController;
 use App\Http\Controllers\Staff\StaffPurchaseController;
 use App\Http\Controllers\Staff\StaffPurchaseRequestController;
 use App\Http\Controllers\Staff\StaffReceivingController;
 use App\Http\Controllers\Staff\StaffSpoilageController;
+use App\Http\Controllers\Staff\StaffSupplierController;
 use Illuminate\Support\Facades\Route;
 
 // Redirect root to login
@@ -123,6 +125,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/suppliers', [AdminSupplierController::class, 'store'])->name('suppliers.store');
     Route::get('/suppliers/{supplier}', [AdminSupplierController::class, 'show'])->name('suppliers.show');
     Route::put('/suppliers/{supplier}', [AdminSupplierController::class, 'update'])->name('suppliers.update');
+    Route::delete('/suppliers/{supplier}', [AdminSupplierController::class, 'destroy'])->name('suppliers.destroy');
     Route::post('/suppliers/{supplier}/payment', [AdminSupplierController::class, 'recordPayment'])->name('suppliers.payment');
 
     // Customers & Credit Terms
@@ -182,6 +185,23 @@ Route::middleware(['auth', 'role:purchasing,admin'])->prefix('staff')->name('sta
 
     // Quotations Module for Staff/Purchaser
     Route::get('/quotations', [QuotationController::class, 'index'])->name('quotations.index');
+
+    // Products Masterfile (Add, Edit, Delete for Purchasing Staff)
+    Route::get('/products', [StaffProductController::class, 'index'])->name('products.index');
+    Route::post('/products', [StaffProductController::class, 'store'])->name('products.store');
+    Route::get('/products/{product}', [StaffProductController::class, 'show'])->name('products.show');
+    Route::put('/products/{product}', [StaffProductController::class, 'update'])->name('products.update');
+    Route::delete('/products/{product}', [StaffProductController::class, 'destroy'])->name('products.destroy');
+    Route::post('/products/{product}/units', [StaffProductController::class, 'storeUnit'])->name('products.units.store');
+    Route::delete('/products/units/{unit}', [StaffProductController::class, 'destroyUnit'])->name('products.units.destroy');
+
+    // Suppliers Directory (Add, Edit, Delete for Purchasing Staff)
+    Route::get('/suppliers', [StaffSupplierController::class, 'index'])->name('suppliers.index');
+    Route::post('/suppliers', [StaffSupplierController::class, 'store'])->name('suppliers.store');
+    Route::get('/suppliers/{supplier}', [StaffSupplierController::class, 'show'])->name('suppliers.show');
+    Route::put('/suppliers/{supplier}', [StaffSupplierController::class, 'update'])->name('suppliers.update');
+    Route::delete('/suppliers/{supplier}', [StaffSupplierController::class, 'destroy'])->name('suppliers.destroy');
+    Route::post('/suppliers/{supplier}/payment', [StaffSupplierController::class, 'recordPayment'])->name('suppliers.payment');
 
     // Purchase Requests
     Route::get('/purchase-requests', [StaffPurchaseRequestController::class, 'index'])->name('purchase-requests.index');

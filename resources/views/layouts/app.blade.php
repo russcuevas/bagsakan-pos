@@ -171,6 +171,16 @@
                         <i class="bi bi-speedometer2"></i>
                         <span>Dashboard</span>
                     </a>
+                    <a href="{{ route('staff.products.index') }}"
+                        class="nav-item {{ request()->routeIs('staff.products.*') ? 'active' : '' }}">
+                        <i class="bi bi-box-seam"></i>
+                        <span>Products & Units</span>
+                    </a>
+                    <a href="{{ route('staff.suppliers.index') }}"
+                        class="nav-item {{ request()->routeIs('staff.suppliers.*') ? 'active' : '' }}">
+                        <i class="bi bi-truck"></i>
+                        <span>Suppliers Directory</span>
+                    </a>
                     <a href="{{ route('staff.quotations.index') }}"
                         class="nav-item {{ request()->routeIs('staff.quotations.*') ? 'active' : '' }}">
                         <i class="bi bi-file-earmark-text"></i>

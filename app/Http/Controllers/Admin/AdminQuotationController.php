@@ -229,9 +229,18 @@ class AdminQuotationController extends Controller
             ]);
         });
 
+        $quotationData = array_merge($quotation->toArray(), [
+            'customer_display_name' => $quotation->customer_display_name,
+            'formatted_quotation_date' => $quotation->formatted_quotation_date,
+            'formatted_valid_until' => $quotation->formatted_valid_until,
+            'customer_name' => $quotation->customer ? ($quotation->customer->business_name ?: $quotation->customer->name) : ($quotation->customer_name ?: 'Walk-in Customer'),
+            'customer_address' => $quotation->customer_address ?: ($quotation->customer?->address ?? ''),
+            'customer_contact' => $quotation->customer_contact ?: ($quotation->customer?->contact_number ?? $quotation->customer_phone ?? ''),
+        ]);
+
         return response()->json([
             'success' => true,
-            'quotation' => $quotation,
+            'quotation' => $quotationData,
             'items_with_stock' => $itemsWithStock,
         ]);
     }

@@ -61,6 +61,9 @@
                                     <button type="button" class="btn btn-sm btn-outline" onclick="editSupplier({{ $sup->id }})" title="Edit Profile">
                                         <i class="bi bi-pencil"></i>
                                     </button>
+                                    <button type="button" class="btn btn-sm btn-danger" onclick="confirmDeleteSupplier({{ $sup->id }}, '{{ addslashes($sup->name) }}')" title="Delete Supplier">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -206,6 +209,30 @@
         </form>
     </div>
 </div>
+
+<!-- Delete Supplier Confirmation Modal -->
+<div id="deleteSupplierModal" class="modal-overlay">
+    <div class="modal-dialog">
+        <div class="modal-header">
+            <h3 class="modal-title text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i> Confirm Supplier Deletion</h3>
+            <button type="button" class="modal-close-btn" data-close-modal="deleteSupplierModal"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form id="deleteSupplierForm" method="POST" class="ajax-form">
+            @csrf
+            @method('DELETE')
+            <div class="modal-body">
+                <p>Are you sure you want to delete supplier <strong id="deleteSupplierNameDisplay"></strong>?</p>
+                <div class="alert alert-warning" style="font-size: 0.85rem;">
+                    <i class="bi bi-info-circle me-1"></i> If this supplier has existing purchase orders, receiving batches, or payment records, it will be safely <strong>deactivated</strong> instead of deleted to protect accounting and audit history.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" data-close-modal="deleteSupplierModal">Cancel</button>
+                <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i> Delete Supplier</button>
+            </div>
+        </form>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -286,6 +313,12 @@
         document.getElementById('pay_amount').value = balance;
         document.getElementById('supplierPaymentForm').action = `/admin/suppliers/${id}/payment`;
         openModal('supplierPaymentModal');
+    }
+
+    function confirmDeleteSupplier(id, name) {
+        document.getElementById('deleteSupplierNameDisplay').innerText = name;
+        document.getElementById('deleteSupplierForm').action = `/admin/suppliers/${id}`;
+        openModal('deleteSupplierModal');
     }
 </script>
 @endpush

@@ -131,4 +131,53 @@ class AdminSupplierController extends Controller
 
         return back()->with('success', 'Supplier payment recorded successfully!');
     }
+
+    /**
+     * Delete or safely deactivate supplier (Admin)
+     */
+    public function destroy(Supplier $supplier)
+    {
+        if ($supplier->purchases()->exists() || $supplier->receivingBatches()->exists() || $supplier->payments()->exists()) {
+            $supplier->update(['is_active' => false]);
+
+            AuditLog::log(
+                action: 'supplier_deactivated',
+                modelType: Supplier::class,
+                modelId: $supplier->id,
+                before: ['is_active' => true],
+                after: ['is_active' => false],
+                reason: 'Supplier deactivated by Admin due to existing transaction history'
+            );
+
+            if (request()->ajax() || request()->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Supplier has existing transaction history. It has been safely deactivated instead of permanently deleted.',
+                ]);
+            }
+            return back()->with('success', 'Supplier has been safely deactivated.');
+        }
+
+        $supplierName = $supplier->name;
+        $supplier->products()->detach();
+        $supplier->delete();
+
+        AuditLog::log(
+            action: 'supplier_deleted',
+            modelType: Supplier::class,
+            modelId: null,
+            before: null,
+            after: ['name' => $supplierName],
+            reason: "Deleted supplier '{$supplierName}' by Admin"
+        );
+
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Supplier '{$supplierName}' deleted successfully.",
+            ]);
+        }
+
+        return redirect()->route('admin.suppliers.index')->with('success', "Supplier '{$supplierName}' deleted successfully.");
+    }
 }

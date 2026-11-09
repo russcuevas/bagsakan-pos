@@ -123,8 +123,13 @@ class Quotation extends Model
     public function getCustomerDisplayNameAttribute()
     {
         if ($this->customer) {
-            return $this->customer->name . ($this->customer->business_name ? " ({$this->customer->business_name})" : '');
+            $biz = trim($this->customer->business_name ?? '');
+            $name = trim($this->customer->name ?? '');
+            if ($biz && $name && strcasecmp($biz, $name) !== 0) {
+                return "{$biz} ({$name})";
+            }
+            return $biz ?: ($name ?: 'Walk-in Customer');
         }
-        return $this->customer_name ?: 'Walk-in Customer';
+        return !empty($this->customer_name) ? $this->customer_name : 'Walk-in Customer';
     }
 }

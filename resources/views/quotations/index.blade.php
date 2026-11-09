@@ -992,21 +992,33 @@
                         `;
                     }).join('');
 
-                    const customerName = (q.customer_display_name && q.customer_display_name !== 'undefined')
-                        ? q.customer_display_name
-                        : ((q.customer && q.customer.name)
-                            ? (q.customer.name + (q.customer.business_name ? ` (${q.customer.business_name})` : ''))
-                            : (q.customer_name && q.customer_name !== 'undefined' ? q.customer_name : 'Walk-in Customer'));
+                    let customerName = 'Walk-in Customer';
+                    if (q.customer_display_name && q.customer_display_name !== 'undefined' && q.customer_display_name.trim() !== '') {
+                        customerName = q.customer_display_name;
+                    } else if (q.customer) {
+                        const biz = (q.customer.business_name || '').trim();
+                        const name = (q.customer.name || '').trim();
+                        if (biz && name && biz.toLowerCase() !== name.toLowerCase()) {
+                            customerName = `${biz} (${name})`;
+                        } else {
+                            customerName = biz || name || 'Walk-in Customer';
+                        }
+                    } else if (q.customer_name && q.customer_name !== 'undefined' && q.customer_name.trim() !== '') {
+                        customerName = q.customer_name;
+                    }
 
                     const formatModalDate = function(val) {
-                        if (!val) return 'N/A';
-                        if (typeof val === 'string' && val.length >= 10) {
-                            const datePart = val.substring(0, 10);
-                            const parts = datePart.split('-');
+                        if (!val || val === 'undefined' || val === 'null') return 'N/A';
+                        if (typeof val === 'string') {
+                            const cleaned = val.replace('Z', '').split('T')[0];
+                            const parts = cleaned.split('-');
                             if (parts.length === 3) {
-                                const d = new Date(parts[0], parts[1] - 1, parts[2]);
-                                if (!isNaN(d.getTime())) {
-                                    return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+                                const y = parseInt(parts[0], 10);
+                                const m = parseInt(parts[1], 10) - 1;
+                                const d = parseInt(parts[2], 10);
+                                const dateObj = new Date(y, m, d);
+                                if (!isNaN(dateObj.getTime())) {
+                                    return dateObj.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
                                 }
                             }
                         }
@@ -1014,8 +1026,12 @@
                         return !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : val;
                     };
 
-                    const formattedOrderDate = q.formatted_quotation_date || formatModalDate(q.quotation_date);
-                    const formattedValidUntil = q.formatted_valid_until || (q.valid_until ? formatModalDate(q.valid_until) : 'N/A');
+                    const formattedOrderDate = (q.formatted_quotation_date && q.formatted_quotation_date !== 'N/A' && !q.formatted_quotation_date.includes('T'))
+                        ? q.formatted_quotation_date
+                        : formatModalDate(q.quotation_date);
+                    const formattedValidUntil = (q.formatted_valid_until && q.formatted_valid_until !== 'N/A' && !q.formatted_valid_until.includes('T'))
+                        ? q.formatted_valid_until
+                        : (q.valid_until ? formatModalDate(q.valid_until) : 'N/A');
 
                     document.getElementById('viewQuoteTitle').innerText = `Customer Order #${q.quotation_number}`;
                     document.getElementById('viewQuoteBody').innerHTML = `
