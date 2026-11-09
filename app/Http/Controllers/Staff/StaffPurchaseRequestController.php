@@ -128,4 +128,25 @@ class StaffPurchaseRequestController extends Controller
 
         return back()->with('success', "Purchase Request #{$purchaseRequest->pr_number} resubmitted for approval.");
     }
+
+    /**
+     * Show PR details (JSON for modal / viewing)
+     */
+    public function show(PurchaseRequest $purchaseRequest)
+    {
+        $purchaseRequest->load([
+            'warehouse',
+            'requester',
+            'approver',
+            'items.product.units',
+            'items.supplier',
+            'items.originalSupplier',
+            'items.generatedPurchase.supplier',
+            'purchases.supplier'
+        ]);
+        return response()->json([
+            'success' => true,
+            'purchase_request' => $purchaseRequest,
+        ]);
+    }
 }

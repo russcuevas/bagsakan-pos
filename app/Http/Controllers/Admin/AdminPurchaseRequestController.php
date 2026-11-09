@@ -139,7 +139,16 @@ class AdminPurchaseRequestController extends Controller
      */
     public function show(PurchaseRequest $purchaseRequest)
     {
-        $purchaseRequest->load(['warehouse', 'requester', 'approver', 'items.product.units', 'items.supplier', 'items.originalSupplier', 'purchases.supplier']);
+        $purchaseRequest->load([
+            'warehouse',
+            'requester',
+            'approver',
+            'items.product.units',
+            'items.supplier',
+            'items.originalSupplier',
+            'items.generatedPurchase.supplier',
+            'purchases.supplier'
+        ]);
         return response()->json([
             'success' => true,
             'purchase_request' => $purchaseRequest,
@@ -191,15 +200,27 @@ class AdminPurchaseRequestController extends Controller
                     if (!empty($itemData['id'])) {
                         $existingItem = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)->find($itemData['id']);
                         if ($existingItem) {
+                            $oldSupplierId = $existingItem->supplier_id;
+                            $newSupplierId = $itemData['supplier_id'];
+                            $origSupplierId = $existingItem->original_supplier_id ?: $oldSupplierId;
+
+                            $remarks = $itemData['remarks'] ?? $existingItem->remarks;
+                            if ($oldSupplierId != $newSupplierId && empty($itemData['remarks'])) {
+                                $newSuppName = Supplier::find($newSupplierId)?->name ?? 'Supplier';
+                                $oldSuppName = Supplier::find($oldSupplierId)?->name ?? 'Supplier';
+                                $remarks = "Awarded to {$newSuppName} (Previously: {$oldSuppName})";
+                            }
+
                             $existingItem->update([
                                 'product_id' => $itemData['product_id'],
-                                'supplier_id' => $itemData['supplier_id'],
+                                'supplier_id' => $newSupplierId,
+                                'original_supplier_id' => $origSupplierId,
                                 'unit_name' => $itemData['unit_name'],
                                 'conversion_factor' => (float) $itemData['conversion_factor'],
                                 'quantity' => $qty,
                                 'estimated_unit_cost' => $cost,
                                 'estimated_subtotal' => $subtotal,
-                                'remarks' => $itemData['remarks'] ?? $existingItem->remarks,
+                                'remarks' => $remarks,
                             ]);
                             $processedItemIds[] = $existingItem->id;
                         }

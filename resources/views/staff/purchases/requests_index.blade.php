@@ -123,14 +123,19 @@
                                 @endif
                             </td>
                             <td style="text-align: right;">
-                                @if($pr->status === 'returned')
-                                    <form action="{{ route('staff.purchase-requests.resubmit', $pr->id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Resubmit this PR for approval?')">
-                                        @csrf
-                                        <button type="submit" class="btn btn-sm btn-outline">
-                                            <i class="bi bi-arrow-clockwise me-1"></i> Resubmit
-                                        </button>
-                                    </form>
-                                @endif
+                                <div style="display: inline-flex; gap: 4px; justify-content: flex-end;">
+                                    <button type="button" class="btn btn-sm btn-outline" onclick="viewPRDetails({{ $pr->id }})" title="View Details & Awarding">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    @if($pr->status === 'returned')
+                                        <form action="{{ route('staff.purchase-requests.resubmit', $pr->id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Resubmit this PR for approval?')">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="Resubmit for Approval">
+                                                <i class="bi bi-arrow-clockwise me-1"></i> Resubmit
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @endforeach
@@ -220,6 +225,22 @@
                 </button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- VIEW PR DETAILS & AWARDING MODAL -->
+<div id="viewPRModal" class="modal-overlay">
+    <div class="modal-dialog modal-xl" style="max-width: 1000px;">
+        <div class="modal-header">
+            <h3 class="modal-title" id="viewPRModalTitle"><i class="bi bi-eye me-2 text-primary"></i> Purchase Request Details</h3>
+            <button type="button" class="modal-close-btn" data-close-modal="viewPRModal"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="modal-body" id="viewPRModalBody">
+            <div style="text-align: center; padding: 40px;"><div class="spinner-border text-primary"></div></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close-modal="viewPRModal">Close</button>
+        </div>
     </div>
 </div>
 
@@ -361,6 +382,124 @@ async function submitCreatePR(e) {
         showToast('error', 'Error', err.message);
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Submit for Approval';
+    }
+}
+
+async function viewPRDetails(id) {
+    openModal('viewPRModal');
+    document.getElementById('viewPRModalBody').innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner-border text-primary"></div></div>';
+
+    try {
+        const res = await fetch(`/staff/purchase-requests/${id}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        const json = await res.json();
+        const pr = json.purchase_request;
+
+        let supplierBreakdown = {};
+        let rowsHtml = pr.items.map(item => {
+            const suppName = item.supplier?.name || 'N/A';
+            const origSuppName = item.original_supplier?.name || null;
+            const isReassigned = origSuppName && item.original_supplier_id && item.original_supplier_id != item.supplier_id;
+            const subtotal = parseFloat(item.estimated_subtotal);
+
+            if (!supplierBreakdown[suppName]) {
+                supplierBreakdown[suppName] = { count: 0, total: 0, poNumber: item.generated_purchase?.purchase_number };
+            }
+            supplierBreakdown[suppName].count += 1;
+            supplierBreakdown[suppName].total += subtotal;
+
+            let poBadge = '';
+            if (item.generated_purchase_id && item.generated_purchase) {
+                poBadge = `<span class="badge badge-info" style="display: inline-block; margin-top: 3px;">
+                    <i class="bi bi-file-earmark-check me-1"></i> ${item.generated_purchase.purchase_number}
+                </span>`;
+            }
+
+            return `
+            <tr>
+                <td style="padding: 8px 10px;">
+                    <strong>${item.product?.sku}</strong> - ${item.product?.name}
+                    ${item.remarks ? `<div style="font-size: 0.72rem; color: var(--text-muted);"><i class="bi bi-chat-left-text me-1"></i> ${item.remarks}</div>` : ''}
+                </td>
+                <td style="padding: 8px 10px;">
+                    <div><strong style="color: var(--color-deep-navy);">${suppName}</strong></div>
+                    ${isReassigned ? `
+                        <span class="badge" style="background:#e0f2fe; color:#0369a1; font-size:0.7rem; border:1px solid #bae6fd;">
+                            <i class="bi bi-arrow-left-right me-1"></i> Orig: ${origSuppName}
+                        </span>
+                    ` : ''}
+                    ${poBadge}
+                </td>
+                <td style="padding: 8px 10px; text-align: center;">${parseFloat(item.quantity)} ${item.unit_name}</td>
+                <td style="padding: 8px 10px; text-align: right;">₱${parseFloat(item.estimated_unit_cost).toFixed(2)}</td>
+                <td style="padding: 8px 10px; text-align: right; font-weight: 700;">₱${subtotal.toFixed(2)}</td>
+            </tr>
+            `;
+        }).join('');
+
+        let breakdownHtml = Object.keys(supplierBreakdown).map(sName => {
+            const data = supplierBreakdown[sName];
+            return `
+                <div style="background: #fff; border: 1px solid var(--card-border); border-radius: 6px; padding: 8px 12px; font-size: 0.78rem;">
+                    <div style="font-weight: 700; color: var(--color-deep-navy);">${sName}</div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                        <span style="color: var(--text-muted);">${data.count} awarded item(s)</span>
+                        <strong style="color: #16a34a;">₱${data.total.toFixed(2)}</strong>
+                    </div>
+                    ${data.poNumber ? `<div style="margin-top: 4px;"><span class="badge badge-success"><i class="bi bi-check2-circle me-1"></i> PO: ${data.poNumber}</span></div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        document.getElementById('viewPRModalTitle').innerText = `Purchase Request #${pr.pr_number}`;
+        document.getElementById('viewPRModalBody').innerHTML = `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px;">
+                <div>
+                    <div style="font-size: 0.78rem; color: var(--text-muted);">Destination Warehouse:</div>
+                    <strong>${pr.warehouse?.name || 'Main Warehouse'}</strong>
+                    <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 2px;">Requested By: <strong>${pr.requester?.name || 'Staff'}</strong></div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.78rem; color: var(--text-muted);">Request Date: <strong>${pr.request_date}</strong></div>
+                    <div style="font-size: 0.8rem; color: var(--text-light); margin-top: 2px;">Needed By: <strong>${pr.needed_by_date || 'N/A'}</strong></div>
+                    <div style="margin-top: 4px;"><span class="badge badge-primary">${pr.status.toUpperCase().replace('_', ' ')}</span></div>
+                </div>
+            </div>
+            ${pr.purpose ? `<div style="background: var(--color-mist-blue); padding: 10px; border-radius: 6px; border: 1px solid var(--card-border); margin-bottom: 14px; font-size: 0.82rem;"><strong>Purpose:</strong> ${pr.purpose}</div>` : ''}
+            
+            <div class="table-responsive" style="border: 1px solid var(--card-border); border-radius: 8px; margin-bottom: 14px;">
+                <table class="table mb-0" style="width: 100%;">
+                    <thead style="background: var(--color-mist-blue); font-size: 0.8rem; text-transform: uppercase;">
+                        <tr>
+                            <th style="padding: 8px 10px;">Product / SKU</th>
+                            <th style="padding: 8px 10px;">Awarded Supplier</th>
+                            <th style="padding: 8px 10px; text-align: center;">Quantity</th>
+                            <th style="padding: 8px 10px; text-align: right;">Est. Unit Cost</th>
+                            <th style="padding: 8px 10px; text-align: right;">Est. Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowsHtml}</tbody>
+                </table>
+            </div>
+
+            <!-- Awarded Supplier Summary Cards -->
+            <div style="margin-bottom: 14px;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">
+                    <i class="bi bi-diagram-3 me-1 text-primary"></i> Awarding Breakdown by Supplier
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                    ${breakdownHtml}
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--color-mist-blue); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--card-border);">
+                <span style="font-weight: 700; color: var(--color-deep-navy);">Total Estimated Cost:</span>
+                <span style="font-size: 1.2rem; font-weight: 800; color: var(--color-primary-blue);">₱${parseFloat(pr.total_estimated_amount).toFixed(2)}</span>
+            </div>
+        `;
+    } catch (e) {
+        document.getElementById('viewPRModalBody').innerHTML = '<div class="alert alert-danger">Error loading PR details: ' + e.message + '</div>';
     }
 }
 </script>

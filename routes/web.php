@@ -206,6 +206,7 @@ Route::middleware(['auth', 'role:purchasing,admin'])->prefix('staff')->name('sta
     // Purchase Requests
     Route::get('/purchase-requests', [StaffPurchaseRequestController::class, 'index'])->name('purchase-requests.index');
     Route::post('/purchase-requests', [StaffPurchaseRequestController::class, 'store'])->name('purchase-requests.store');
+    Route::get('/purchase-requests/{purchaseRequest}', [StaffPurchaseRequestController::class, 'show'])->name('purchase-requests.show');
     Route::post('/purchase-requests/{purchaseRequest}/resubmit', [StaffPurchaseRequestController::class, 'resubmit'])->name('purchase-requests.resubmit');
 
     // Purchase Orders

@@ -298,12 +298,12 @@
                     <table class="table mb-0" style="width: 100%;">
                         <thead style="background: var(--color-mist-blue); font-size: 0.8rem; text-transform: uppercase;">
                             <tr>
-                                <th style="padding: 10px; width: 25%;">SKU / Product</th>
-                                <th style="padding: 10px; width: 25%;">Supplier</th>
-                                <th style="padding: 10px; width: 12%;">Unit</th>
+                                <th style="padding: 10px; width: 23%;">SKU / Product</th>
+                                <th style="padding: 10px; width: 27%;">Awarded Supplier <span class="text-danger">*</span></th>
+                                <th style="padding: 10px; width: 10%;">Unit</th>
                                 <th style="padding: 10px; width: 10%;">Qty</th>
-                                <th style="padding: 10px; width: 13%;">Unit Cost</th>
-                                <th style="padding: 10px; width: 10%;">Subtotal</th>
+                                <th style="padding: 10px; width: 12%;">Unit Cost</th>
+                                <th style="padding: 10px; width: 13%;">Subtotal</th>
                                 <th style="padding: 10px; width: 5%; text-align: center;">Action</th>
                             </tr>
                         </thead>
@@ -312,6 +312,9 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Live PO Split Preview by Awarded Supplier -->
+                <div id="reviewPOSplitPreview" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px;"></div>
 
                 <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 16px;">
                     <div>
@@ -561,25 +564,34 @@ function renderReviewPRRow(item = null) {
 
     const prodId = item ? item.product_id : '';
     const suppId = item ? item.supplier_id : '';
+    const origSuppId = item && item.original_supplier_id ? item.original_supplier_id : suppId;
     const qty = item ? parseFloat(item.quantity) : 1;
     const origQty = item && item.original_quantity ? parseFloat(item.original_quantity) : qty;
     const cost = item ? parseFloat(item.estimated_unit_cost) : 0;
     const origCost = item && item.original_unit_cost ? parseFloat(item.original_unit_cost) : cost;
     const itemId = item ? item.id : '';
+    const remarks = item ? (item.remarks || '') : '';
 
     tr.innerHTML = `
         <td style="padding: 8px 10px;">
-            <select name="items[${idx}][product_id]" class="form-select form-select-sm" required>
+            <select name="items[${idx}][product_id]" id="rev_prod_${idx}" class="form-select form-select-sm" onchange="calculateReviewRow(${idx})" required>
                 ${productsData.map(p => `<option value="${p.id}" ${p.id == prodId ? 'selected' : ''}>${p.sku} - ${p.name}</option>`).join('')}
             </select>
             <input type="hidden" name="items[${idx}][id]" value="${itemId}">
             <input type="hidden" name="items[${idx}][conversion_factor]" value="${item ? item.conversion_factor : 1}">
+            <input type="text" name="items[${idx}][remarks]" class="form-control form-control-sm mt-1" placeholder="Award note (e.g. Lowest bid)..." value="${remarks}" style="font-size: 0.72rem;">
         </td>
         <td style="padding: 8px 10px;">
-            <select name="items[${idx}][supplier_id]" class="form-select form-select-sm" required>
+            <select name="items[${idx}][supplier_id]" id="rev_supp_${idx}" class="form-select form-select-sm" onchange="calculateReviewRow(${idx})" required>
                 ${suppliersData.map(s => `<option value="${s.id}" ${s.id == suppId ? 'selected' : ''}>${s.name}</option>`).join('')}
             </select>
-            ${item && item.original_supplier_id && item.original_supplier_id != suppId ? `<div style="font-size: 0.72rem; color: #64748b;">Orig: ${item.original_supplier?.name}</div>` : ''}
+            <div id="rev_supp_badge_${idx}" style="margin-top: 4px;">
+                ${item && origSuppId && origSuppId != suppId ? `
+                    <span class="badge" style="background: #e0f2fe; color: #0369a1; font-size: 0.7rem; border: 1px solid #bae6fd;">
+                        <i class="bi bi-arrow-left-right me-1"></i> Orig: ${item.original_supplier?.name || 'Different Supplier'}
+                    </span>
+                ` : ''}
+            </div>
         </td>
         <td style="padding: 8px 10px;">
             <input type="text" name="items[${idx}][unit_name]" class="form-control form-control-sm" value="${item ? item.unit_name : 'kg'}" required>
@@ -623,10 +635,70 @@ function calculateReviewRow(idx) {
 
 function calculateReviewTotal() {
     let total = 0;
-    document.querySelectorAll('[id^="rev_subtotal_"]').forEach(el => {
-        total += parseFloat(el.getAttribute('data-val') || 0);
+    const supplierGroups = {};
+
+    document.querySelectorAll('[id^="rev_row_"]').forEach(row => {
+        const idMatch = row.id.match(/\d+/);
+        if (idMatch) {
+            const idx = idMatch[0];
+            const qty = parseFloat(document.getElementById(`rev_qty_${idx}`)?.value || 0);
+            const cost = parseFloat(document.getElementById(`rev_cost_${idx}`)?.value || 0);
+            const sub = qty * cost;
+            total += sub;
+
+            const suppSelect = document.getElementById(`rev_supp_${idx}`);
+            const suppId = suppSelect?.value;
+            const suppName = suppSelect && suppSelect.selectedIndex >= 0 ? suppSelect.options[suppSelect.selectedIndex]?.text : 'Unknown';
+
+            const prodSelect = document.getElementById(`rev_prod_${idx}`);
+            const prodName = prodSelect && prodSelect.selectedIndex >= 0 ? (prodSelect.options[prodSelect.selectedIndex]?.text.split(' - ')[1] || prodSelect.options[prodSelect.selectedIndex]?.text) : 'Item';
+
+            if (suppId) {
+                if (!supplierGroups[suppId]) {
+                    supplierGroups[suppId] = { name: suppName, items: [], total: 0 };
+                }
+                supplierGroups[suppId].items.push(`${prodName} (${qty} @ ₱${cost.toFixed(2)})`);
+                supplierGroups[suppId].total += sub;
+            }
+        }
     });
+
     document.getElementById('reviewPRTotalDisplay').innerText = '₱' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Render Live PO Split Preview Card
+    const previewContainer = document.getElementById('reviewPOSplitPreview');
+    if (previewContainer) {
+        const suppKeys = Object.keys(supplierGroups);
+        if (suppKeys.length === 0) {
+            previewContainer.innerHTML = '<span class="text-muted" style="font-size: 0.8rem;">No items selected for awarding.</span>';
+        } else {
+            let splitHtml = `
+                <div style="font-weight: 700; color: #15803d; font-size: 0.85rem; margin-bottom: 8px;">
+                    <i class="bi bi-diagram-3-fill me-1"></i> Multi-Supplier Awarding & Auto-Split Preview (${suppKeys.length} PO${suppKeys.length > 1 ? 's' : ''} will be generated):
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px;">
+            `;
+            suppKeys.forEach((sId, i) => {
+                const group = supplierGroups[sId];
+                splitHtml += `
+                    <div style="background: #fff; border: 1px solid #86efac; border-radius: 6px; padding: 10px 12px; font-size: 0.78rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <strong style="color: var(--color-deep-navy); font-size: 0.84rem;"><i class="bi bi-file-earmark-text text-primary me-1"></i> PO #${i + 1}: ${group.name}</strong>
+                            <span class="badge badge-success" style="font-size: 0.78rem;">₱${group.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div style="color: var(--text-muted); font-size: 0.74rem;">
+                            <strong style="color: var(--text-dark);">Awarded Items (${group.items.length}):</strong>
+                            <ul style="margin: 4px 0 0 16px; padding: 0;">
+                                ${group.items.map(it => `<li>${it}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            });
+            splitHtml += `</div>`;
+            previewContainer.innerHTML = splitHtml;
+        }
+    }
 }
 
 function triggerPRAction(action) {
@@ -726,15 +798,61 @@ async function viewPRDetails(id) {
         const json = await res.json();
         const pr = json.purchase_request;
 
-        let rowsHtml = pr.items.map(item => `
+        let supplierBreakdown = {};
+        let rowsHtml = pr.items.map(item => {
+            const suppName = item.supplier?.name || 'N/A';
+            const origSuppName = item.original_supplier?.name || null;
+            const isReassigned = origSuppName && item.original_supplier_id && item.original_supplier_id != item.supplier_id;
+            const subtotal = parseFloat(item.estimated_subtotal);
+
+            if (!supplierBreakdown[suppName]) {
+                supplierBreakdown[suppName] = { count: 0, total: 0, poNumber: item.generated_purchase?.purchase_number };
+            }
+            supplierBreakdown[suppName].count += 1;
+            supplierBreakdown[suppName].total += subtotal;
+
+            let poBadge = '';
+            if (item.generated_purchase_id && item.generated_purchase) {
+                poBadge = `<a href="/admin/purchases" class="badge badge-info" style="text-decoration:none; display: inline-block; margin-top: 3px;">
+                    <i class="bi bi-file-earmark-check me-1"></i> ${item.generated_purchase.purchase_number}
+                </a>`;
+            }
+
+            return `
             <tr>
-                <td style="padding: 8px 10px;"><strong>${item.product?.sku}</strong> - ${item.product?.name}</td>
-                <td style="padding: 8px 10px;"><span class="badge badge-navy">${item.supplier?.name || 'N/A'}</span></td>
+                <td style="padding: 8px 10px;">
+                    <strong>${item.product?.sku}</strong> - ${item.product?.name}
+                    ${item.remarks ? `<div style="font-size: 0.72rem; color: var(--text-muted);"><i class="bi bi-chat-left-text me-1"></i> ${item.remarks}</div>` : ''}
+                </td>
+                <td style="padding: 8px 10px;">
+                    <div><strong style="color: var(--color-deep-navy);">${suppName}</strong></div>
+                    ${isReassigned ? `
+                        <span class="badge" style="background:#e0f2fe; color:#0369a1; font-size:0.7rem; border:1px solid #bae6fd;">
+                            <i class="bi bi-arrow-left-right me-1"></i> Orig: ${origSuppName}
+                        </span>
+                    ` : ''}
+                    ${poBadge}
+                </td>
                 <td style="padding: 8px 10px; text-align: center;">${parseFloat(item.quantity)} ${item.unit_name}</td>
                 <td style="padding: 8px 10px; text-align: right;">₱${parseFloat(item.estimated_unit_cost).toFixed(2)}</td>
-                <td style="padding: 8px 10px; text-align: right; font-weight: 700;">₱${parseFloat(item.estimated_subtotal).toFixed(2)}</td>
+                <td style="padding: 8px 10px; text-align: right; font-weight: 700;">₱${subtotal.toFixed(2)}</td>
             </tr>
-        `).join('');
+            `;
+        }).join('');
+
+        let breakdownHtml = Object.keys(supplierBreakdown).map(sName => {
+            const data = supplierBreakdown[sName];
+            return `
+                <div style="background: #fff; border: 1px solid var(--card-border); border-radius: 6px; padding: 8px 12px; font-size: 0.78rem;">
+                    <div style="font-weight: 700; color: var(--color-deep-navy);">${sName}</div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                        <span style="color: var(--text-muted);">${data.count} awarded item(s)</span>
+                        <strong style="color: #16a34a;">₱${data.total.toFixed(2)}</strong>
+                    </div>
+                    ${data.poNumber ? `<div style="margin-top: 4px;"><span class="badge badge-success"><i class="bi bi-check2-circle me-1"></i> Generated: ${data.poNumber}</span></div>` : ''}
+                </div>
+            `;
+        }).join('');
 
         document.getElementById('viewPRModalTitle').innerText = `Purchase Request #${pr.pr_number}`;
         document.getElementById('viewPRModalBody').innerHTML = `
@@ -751,12 +869,13 @@ async function viewPRDetails(id) {
                 </div>
             </div>
             ${pr.purpose ? `<div style="background: var(--color-mist-blue); padding: 10px; border-radius: 6px; border: 1px solid var(--card-border); margin-bottom: 14px; font-size: 0.82rem;"><strong>Purpose:</strong> ${pr.purpose}</div>` : ''}
+            
             <div class="table-responsive" style="border: 1px solid var(--card-border); border-radius: 8px; margin-bottom: 14px;">
                 <table class="table mb-0" style="width: 100%;">
                     <thead style="background: var(--color-mist-blue); font-size: 0.8rem; text-transform: uppercase;">
                         <tr>
                             <th style="padding: 8px 10px;">Product / SKU</th>
-                            <th style="padding: 8px 10px;">Target Supplier</th>
+                            <th style="padding: 8px 10px;">Awarded Supplier</th>
                             <th style="padding: 8px 10px; text-align: center;">Quantity</th>
                             <th style="padding: 8px 10px; text-align: right;">Est. Unit Cost</th>
                             <th style="padding: 8px 10px; text-align: right;">Est. Subtotal</th>
@@ -765,6 +884,17 @@ async function viewPRDetails(id) {
                     <tbody>${rowsHtml}</tbody>
                 </table>
             </div>
+
+            <!-- Awarded Supplier Summary Cards -->
+            <div style="margin-bottom: 14px;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">
+                    <i class="bi bi-diagram-3 me-1 text-primary"></i> Awarding Breakdown by Supplier
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                    ${breakdownHtml}
+                </div>
+            </div>
+
             <div style="display: flex; justify-content: space-between; align-items: center; background: var(--color-mist-blue); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--card-border);">
                 <span style="font-weight: 700; color: var(--color-deep-navy);">Total Estimated Cost:</span>
                 <span style="font-size: 1.2rem; font-weight: 800; color: var(--color-primary-blue);">₱${parseFloat(pr.total_estimated_amount).toFixed(2)}</span>
