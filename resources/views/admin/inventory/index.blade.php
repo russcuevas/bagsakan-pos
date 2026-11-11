@@ -244,14 +244,31 @@
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label" for="adj_qty">Quantity (in Base Unit) <span class="text-danger">*</span></label>
-                    <input type="number" step="0.01" id="adj_qty" name="quantity" class="form-control" placeholder="0.00" required>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label class="form-label" for="adj_qty">Quantity (in Base Unit) <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" id="adj_qty" name="quantity" class="form-control" placeholder="0.00" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="adj_cost">Cost per Unit / Puhunan (₱) <small class="text-muted">(Optional)</small></label>
+                        <input type="number" step="0.01" id="adj_cost" name="unit_cost" class="form-control" placeholder="e.g. 45.00 for Opening Stock">
+                    </div>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label" for="adj_reason">Adjustment Reason <span class="text-danger">*</span></label>
-                    <input type="text" id="adj_reason" name="reason" class="form-control" placeholder="e.g. Physical inventory discrepancy, recount adjustment" required>
+                    <input type="text" id="adj_reason" name="reason" class="form-control" placeholder="e.g. Opening Stock, Physical recount, Discrepancy" required>
+                    <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+                        <button type="button" class="btn btn-xs btn-outline" style="font-size: 0.72rem; padding: 2px 8px;" onclick="document.getElementById('adj_reason').value='Opening Stock (Panimulang Imbentaryo)'; document.getElementById('adj_type').value='increase';">
+                            <i class="bi bi-box-arrow-in-down me-1 text-success"></i> Opening Stock
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline" style="font-size: 0.72rem; padding: 2px 8px;" onclick="document.getElementById('adj_reason').value='Physical Inventory Recount';">
+                            <i class="bi bi-clipboard-check me-1 text-primary"></i> Physical Recount
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline" style="font-size: 0.72rem; padding: 2px 8px;" onclick="document.getElementById('adj_reason').value='Damaged / Expired Discrepancy'; document.getElementById('adj_type').value='decrease';">
+                            <i class="bi bi-trash me-1 text-danger"></i> Damaged / Expired
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">

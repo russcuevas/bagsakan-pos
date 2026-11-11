@@ -55,6 +55,7 @@ class AdminInventoryController extends Controller
             'batch_id' => 'nullable|exists:receiving_batches,id',
             'type' => 'required|in:increase,decrease',
             'quantity' => 'required|numeric|min:0.01',
+            'unit_cost' => 'nullable|numeric|min:0',
             'reason' => 'required|string|max:255',
         ]);
 
@@ -92,11 +93,18 @@ class AdminInventoryController extends Controller
                 $mType = 'adjustment_out';
             } else {
                 // Increase stock
-                $unitCost = (float)$product->average_cost;
+                $customCost = isset($validated['unit_cost']) && $validated['unit_cost'] !== '' && $validated['unit_cost'] !== null 
+                    ? (float) $validated['unit_cost'] 
+                    : null;
+                $unitCost = $customCost !== null ? $customCost : (float)$product->average_cost;
+
                 if (!empty($validated['batch_id'])) {
                     $batch = ReceivingBatch::findOrFail($validated['batch_id']);
                     $batch->current_quantity += $qty;
                     $batch->status = 'active';
+                    if ($customCost !== null) {
+                        $batch->unit_cost = $customCost;
+                    }
                     $batch->save();
                     $unitCost = (float)$batch->unit_cost;
                 } else {
@@ -113,6 +121,12 @@ class AdminInventoryController extends Controller
                         'unit_cost' => $unitCost,
                         'status' => 'active',
                     ]);
+                }
+
+                // If product had 0 cost or custom opening cost provided, update average_cost
+                if ($unitCost > 0 && ($product->average_cost == 0 || str_contains(strtolower($validated['reason']), 'opening'))) {
+                    $product->average_cost = $unitCost;
+                    $product->save();
                 }
 
                 $qtyChange = $qty;

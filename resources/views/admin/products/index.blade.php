@@ -160,6 +160,36 @@
                     </div>
                 </div>
 
+                <!-- Initial / Opening Stock (Optional) -->
+                <div style="margin: 16px 0; padding: 14px 16px; background: #f0fdf4; border-radius: var(--radius-sm); border: 1px solid #bbf7d0;">
+                    <div style="font-weight: 700; font-size: 0.88rem; color: #166534; margin-bottom: 4px;">
+                        <i class="bi bi-box-arrow-in-down me-1"></i> Initial / Opening Stock (Panimulang Imbentaryo) <small class="text-muted" style="font-weight: 400;">— Optional</small>
+                    </div>
+                    <div style="font-size: 0.76rem; color: #15803d; margin-bottom: 12px;">
+                        Kung mayroon ka nang physical stock sa bodega, ilagay ang panimulang bilang at puhunan dito para magka-stock agad pagka-save ng produkto.
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;">
+                        <div class="form-group mb-0">
+                            <label class="form-label" for="add_opening_stock" style="font-size: 0.8rem; color: #166534;">Opening Quantity</label>
+                            <input type="number" step="0.01" min="0" id="add_opening_stock" name="opening_stock" class="form-control" placeholder="0.00">
+                        </div>
+                        <div class="form-group mb-0">
+                            <label class="form-label" for="add_opening_cost" style="font-size: 0.8rem; color: #166534;">Cost per Unit / Puhunan (₱)</label>
+                            <input type="number" step="0.01" min="0" id="add_opening_cost" name="opening_cost" class="form-control" placeholder="0.00">
+                        </div>
+                        <div class="form-group mb-0">
+                            <label class="form-label" for="add_warehouse_id" style="font-size: 0.8rem; color: #166534;">Target Warehouse</label>
+                            <select id="add_warehouse_id" name="warehouse_id" class="form-select">
+                                @if(isset($warehouses))
+                                    @foreach($warehouses as $w)
+                                        <option value="{{ $w->id }}">{{ $w->name }}</option>
+                                    @endforeach
+                                @endif
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Additional Wholesale/Retail Conversion Units -->
                 <div style="margin: 16px 0; padding: 16px; background: var(--body-bg); border-radius: var(--radius-sm); border: 1px dashed var(--card-border);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">

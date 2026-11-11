@@ -5,10 +5,14 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Category;
+use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\ReceivingBatch;
 use App\Models\SellingPriceHistory;
+use App\Models\StockAdjustment;
 use App\Models\Supplier;
+use App\Models\Warehouse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -38,8 +42,9 @@ class AdminProductController extends Controller
         $products = $query->latest()->get();
         $categories = Category::all();
         $suppliers = Supplier::where('is_active', true)->get();
+        $warehouses = Warehouse::where('is_active', true)->get();
 
-        return view('admin.products.index', compact('products', 'categories', 'suppliers'));
+        return view('admin.products.index', compact('products', 'categories', 'suppliers', 'warehouses'));
     }
 
     public function store(Request $request)
@@ -60,6 +65,9 @@ class AdminProductController extends Controller
             'units.*.srp' => 'required_with:units|numeric|min:0',
             'supplier_ids' => 'nullable|array',
             'supplier_ids.*' => 'exists:suppliers,id',
+            'opening_stock' => 'nullable|numeric|min:0',
+            'opening_cost' => 'nullable|numeric|min:0',
+            'warehouse_id' => 'nullable|exists:warehouses,id',
         ]);
 
         DB::transaction(function () use ($request, $validated) {
@@ -130,6 +138,64 @@ class AdminProductController extends Controller
                 'reason' => 'Initial product creation SRP',
                 'updated_by' => auth()->id(),
             ]);
+
+            // Opening / Initial Stock initialization
+            $openingStock = (float) ($validated['opening_stock'] ?? 0);
+            $openingCost = (float) ($validated['opening_cost'] ?? 0);
+
+            if ($openingStock > 0) {
+                $warehouseId = $validated['warehouse_id'] ?? Warehouse::where('is_active', true)->first()?->id;
+
+                if ($warehouseId) {
+                    $product->average_cost = $openingCost;
+                    $product->save();
+
+                    $batchCode = 'BATCH-INIT-' . $product->sku . '-' . strtoupper(substr(uniqid(), -4));
+                    $batch = ReceivingBatch::create([
+                        'batch_code' => $batchCode,
+                        'product_id' => $product->id,
+                        'supplier_id' => !empty($validated['supplier_ids']) ? $validated['supplier_ids'][0] : null,
+                        'warehouse_id' => $warehouseId,
+                        'receipt_date' => now()->format('Y-m-d'),
+                        'invoice_dr_number' => 'OPENING-STOCK',
+                        'initial_quantity' => $openingStock,
+                        'current_quantity' => $openingStock,
+                        'unit_cost' => $openingCost,
+                        'status' => 'active',
+                    ]);
+
+                    $adjNum = 'ADJ-INIT-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+                    $adj = StockAdjustment::create([
+                        'adjustment_number' => $adjNum,
+                        'product_id' => $product->id,
+                        'warehouse_id' => $warehouseId,
+                        'batch_id' => $batch->id,
+                        'type' => 'increase',
+                        'quantity' => $openingStock,
+                        'unit_cost' => $openingCost,
+                        'reason' => 'Opening Stock / Panimulang Imbentaryo',
+                        'status' => 'approved',
+                        'submitted_by' => auth()->id(),
+                        'approved_by' => auth()->id(),
+                    ]);
+
+                    InventoryMovement::create([
+                        'product_id' => $product->id,
+                        'batch_id' => $batch->id,
+                        'warehouse_id' => $warehouseId,
+                        'movement_type' => 'adjustment_in',
+                        'reference_type' => 'adjustment',
+                        'reference_id' => $adj->id,
+                        'quantity_change' => $openingStock,
+                        'unit_cost' => $openingCost,
+                        'unit_price' => $product->default_srp,
+                        'stock_before' => 0,
+                        'stock_after' => $openingStock,
+                        'notes' => 'Opening inventory balance upon product registration',
+                        'created_by' => auth()->id(),
+                    ]);
+                }
+            }
 
             AuditLog::log(
                 action: 'product_created',
