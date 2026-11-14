@@ -156,6 +156,128 @@ class AdminPurchaseRequestController extends Controller
     }
 
     /**
+     * Direct Update / Edit PR by Admin
+     */
+    public function update(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        if ($purchaseRequest->status === 'converted_to_po') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot edit a Purchase Request that has already been converted to Purchase Orders.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'warehouse_id' => 'required|exists:warehouses,id',
+            'needed_by_date' => 'nullable|date',
+            'purpose' => 'nullable|string',
+            'remarks' => 'nullable|string',
+            'status' => 'nullable|in:draft,submitted,approved,returned,rejected',
+            'items' => 'required|array|min:1',
+            'items.*.id' => 'nullable|exists:purchase_request_items,id',
+            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.supplier_id' => 'required|exists:suppliers,id',
+            'items.*.unit_name' => 'required|string',
+            'items.*.conversion_factor' => 'required|numeric|min:0.0001',
+            'items.*.quantity' => 'required|numeric|min:0.01',
+            'items.*.estimated_unit_cost' => 'required|numeric|min:0',
+            'items.*.remarks' => 'nullable|string',
+        ]);
+
+        $pr = DB::transaction(function () use ($purchaseRequest, $validated) {
+            $totalEstimated = 0;
+            $processedItemIds = [];
+
+            foreach ($validated['items'] as $itemData) {
+                $qty = (float) $itemData['quantity'];
+                $cost = (float) $itemData['estimated_unit_cost'];
+                $subtotal = $qty * $cost;
+                $totalEstimated += $subtotal;
+
+                if (!empty($itemData['id'])) {
+                    $item = PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)->find($itemData['id']);
+                    if ($item) {
+                        $oldSuppId = $item->supplier_id;
+                        $newSuppId = $itemData['supplier_id'];
+                        $origSuppId = $item->original_supplier_id ?: $oldSuppId;
+                        $remarks = $itemData['remarks'] ?? $item->remarks;
+
+                        if ($oldSuppId != $newSuppId && empty($itemData['remarks'])) {
+                            $newSuppName = Supplier::find($newSuppId)?->name ?? 'Supplier';
+                            $oldSuppName = Supplier::find($oldSuppId)?->name ?? 'Supplier';
+                            $remarks = "Awarded to {$newSuppName} (Previously: {$oldSuppName})";
+                        }
+
+                        $item->update([
+                            'product_id' => $itemData['product_id'],
+                            'supplier_id' => $newSuppId,
+                            'original_supplier_id' => $origSuppId,
+                            'unit_name' => $itemData['unit_name'],
+                            'conversion_factor' => (float) $itemData['conversion_factor'],
+                            'quantity' => $qty,
+                            'estimated_unit_cost' => $cost,
+                            'estimated_subtotal' => $subtotal,
+                            'remarks' => $remarks,
+                        ]);
+                        $processedItemIds[] = $item->id;
+                    }
+                } else {
+                    $newItem = $purchaseRequest->items()->create([
+                        'product_id' => $itemData['product_id'],
+                        'supplier_id' => $itemData['supplier_id'],
+                        'unit_name' => $itemData['unit_name'],
+                        'conversion_factor' => (float) $itemData['conversion_factor'],
+                        'quantity' => $qty,
+                        'estimated_unit_cost' => $cost,
+                        'estimated_subtotal' => $subtotal,
+                        'original_quantity' => $qty,
+                        'original_unit_cost' => $cost,
+                        'original_supplier_id' => $itemData['supplier_id'],
+                        'remarks' => $itemData['remarks'] ?? 'Added by Admin during edit',
+                        'status' => 'pending',
+                    ]);
+                    $processedItemIds[] = $newItem->id;
+                }
+            }
+
+            // Delete removed items
+            $purchaseRequest->items()->whereNotIn('id', $processedItemIds)->delete();
+
+            $updateData = [
+                'warehouse_id' => $validated['warehouse_id'],
+                'needed_by_date' => $validated['needed_by_date'] ?? $purchaseRequest->needed_by_date,
+                'purpose' => $validated['purpose'] ?? $purchaseRequest->purpose,
+                'remarks' => $validated['remarks'] ?? $purchaseRequest->remarks,
+                'total_estimated_amount' => $totalEstimated,
+            ];
+
+            if (!empty($validated['status'])) {
+                $updateData['status'] = $validated['status'];
+            }
+
+            $purchaseRequest->update($updateData);
+
+            AuditLog::log('pr_updated_by_admin', PurchaseRequest::class, $purchaseRequest->id, null, [
+                'pr_number' => $purchaseRequest->pr_number,
+                'total_amount' => $totalEstimated,
+                'status' => $purchaseRequest->status,
+            ], "Admin updated Purchase Request #{$purchaseRequest->pr_number}");
+
+            return $purchaseRequest;
+        });
+
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Purchase Request #{$pr->pr_number} updated successfully!",
+                'pr' => $pr->load(['items.product', 'items.supplier', 'warehouse']),
+            ]);
+        }
+
+        return redirect()->route('admin.purchase-requests.index')->with('success', "Purchase Request #{$pr->pr_number} updated successfully.");
+    }
+
+    /**
      * Supervisor/Admin Review, Modify & Approval Action
      * Allows supervisor to edit items, quantities, costs, suppliers, approve, reject, or return for revision
      */

@@ -127,10 +127,15 @@
                                     <button type="button" class="btn btn-sm btn-outline" onclick="viewPRDetails({{ $pr->id }})" title="View Details & Awarding">
                                         <i class="bi bi-eye"></i>
                                     </button>
+                                    @if(in_array($pr->status, ['returned', 'draft']))
+                                        <button type="button" class="btn btn-sm btn-warning" onclick="openEditPRModal({{ $pr->id }})" title="Edit / Revise PR">
+                                            <i class="bi bi-pencil me-1"></i> Edit
+                                        </button>
+                                    @endif
                                     @if($pr->status === 'returned')
-                                        <form action="{{ route('staff.purchase-requests.resubmit', $pr->id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Resubmit this PR for approval?')">
+                                        <form action="{{ route('staff.purchase-requests.resubmit', $pr->id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Resubmit this PR for approval without further edits?')">
                                             @csrf
-                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="Resubmit for Approval">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="Quick Resubmit to Admin">
                                                 <i class="bi bi-arrow-clockwise me-1"></i> Resubmit
                                             </button>
                                         </form>
@@ -223,6 +228,102 @@
                 <button type="submit" class="btn btn-primary" id="savePRBtn">
                     <i class="bi bi-check-lg me-1"></i> Submit for Approval
                 </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- EDIT / REVISE PR MODAL FOR STAFF -->
+<div id="editPRModal" class="modal-overlay">
+    <div class="modal-dialog modal-xl" style="max-width: 1050px;">
+        <div class="modal-header">
+            <h3 class="modal-title"><i class="bi bi-pencil-square me-2 text-warning"></i> Edit / Revise Purchase Request <span id="editPRNumberDisplay" class="text-primary"></span></h3>
+            <button type="button" class="modal-close-btn" data-close-modal="editPRModal"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form id="editPRForm" onsubmit="submitEditPR(event)">
+            @csrf
+            @method('PUT')
+            <input type="hidden" id="editPRId">
+            <input type="hidden" name="status" id="editPRSubmitStatus" value="submitted">
+
+            <div class="modal-body">
+                <!-- Revision Instructions Alert from Admin -->
+                <div id="editPRRevisionAlert" style="display: none; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; color: #92400e;">
+                    <div style="font-weight: 700; font-size: 0.85rem; margin-bottom: 2px;">
+                        <i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i> Return for Revision Note from Admin:
+                    </div>
+                    <div id="editPRRevisionText" style="font-size: 0.85rem; padding-left: 18px;"></div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+                    <div class="form-group mb-0">
+                        <label class="form-label" for="edit_pr_warehouse">Destination Warehouse <span class="text-danger">*</span></label>
+                        <select name="warehouse_id" id="edit_pr_warehouse" class="form-select" required>
+                            @foreach($warehouses as $w)
+                                <option value="{{ $w->id }}">{{ $w->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="form-label" for="edit_pr_needed_by">Needed By Date</label>
+                        <input type="date" name="needed_by_date" id="edit_pr_needed_by" class="form-control">
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="form-label" for="edit_pr_purpose">Purpose / Project Reference</label>
+                        <input type="text" name="purpose" id="edit_pr_purpose" class="form-control" placeholder="e.g. Weekly Kitchen Stock replenishment">
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: 700; color: var(--color-deep-navy); font-size: 0.9rem;">
+                        <i class="bi bi-boxes me-1 text-primary"></i> Requested Items
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline" onclick="addEditPRRow()">
+                        <i class="bi bi-plus-circle me-1"></i> Add Line Item
+                    </button>
+                </div>
+
+                <div class="table-responsive" style="border: 1px solid var(--card-border); border-radius: 8px; margin-bottom: 16px;">
+                    <table class="table mb-0" style="width: 100%;">
+                        <thead style="background: var(--color-mist-blue); font-size: 0.8rem; text-transform: uppercase;">
+                            <tr>
+                                <th style="padding: 10px; width: 25%;">SKU / Product <span class="text-danger">*</span></th>
+                                <th style="padding: 10px; width: 25%;">Target Supplier <span class="text-danger">*</span></th>
+                                <th style="padding: 10px; width: 12%;">Unit</th>
+                                <th style="padding: 10px; width: 10%;">Qty</th>
+                                <th style="padding: 10px; width: 13%;">Est. Unit Cost</th>
+                                <th style="padding: 10px; width: 10%;">Subtotal</th>
+                                <th style="padding: 10px; width: 5%; text-align: center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="editPRRowsContainer">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 16px;">
+                    <div class="form-group mb-0">
+                        <label class="form-label" for="edit_pr_remarks">Revision Notes / Remarks</label>
+                        <textarea name="remarks" id="edit_pr_remarks" class="form-control" rows="2" placeholder="Explain adjustments made for admin review..."></textarea>
+                    </div>
+                    <div style="background: var(--color-mist-blue); border: 1px solid var(--card-border); border-radius: 8px; padding: 14px; text-align: right;">
+                        <span style="font-size: 0.85rem; color: var(--text-muted);">Total Estimated Amount:</span>
+                        <div style="font-size: 1.3rem; font-weight: 800; color: var(--color-primary-blue);" id="editPRTotalDisplay">₱0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="display: flex; justify-content: space-between;">
+                <button type="button" class="btn btn-outline" data-close-modal="editPRModal">Cancel</button>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('editPRSubmitStatus').value='draft'; document.getElementById('editPRForm').requestSubmit();">
+                        <i class="bi bi-save me-1"></i> Save as Draft
+                    </button>
+                    <button type="submit" class="btn btn-success" id="editPRSubmitBtn" onclick="document.getElementById('editPRSubmitStatus').value='submitted';">
+                        <i class="bi bi-send-check me-1"></i> Save & Resubmit to Admin
+                    </button>
+                </div>
             </div>
         </form>
     </div>
@@ -500,6 +601,175 @@ async function viewPRDetails(id) {
         `;
     } catch (e) {
         document.getElementById('viewPRModalBody').innerHTML = '<div class="alert alert-danger">Error loading PR details: ' + e.message + '</div>';
+    }
+}
+
+let editPRRowIdx = 0;
+
+async function openEditPRModal(id) {
+    openModal('editPRModal');
+    document.getElementById('editPRNumberDisplay').innerText = 'Loading...';
+    document.getElementById('editPRRowsContainer').innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary spinner-border-sm"></div> Loading PR details...</td></tr>';
+
+    try {
+        const res = await fetch(`/staff/purchase-requests/${id}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        const json = await res.json();
+        const pr = json.purchase_request;
+
+        document.getElementById('editPRId').value = pr.id;
+        document.getElementById('editPRNumberDisplay').innerText = `#${pr.pr_number}`;
+
+        if (pr.revision_notes) {
+            document.getElementById('editPRRevisionAlert').style.display = 'block';
+            document.getElementById('editPRRevisionText').innerText = pr.revision_notes;
+        } else {
+            document.getElementById('editPRRevisionAlert').style.display = 'none';
+        }
+
+        document.getElementById('edit_pr_warehouse').value = pr.warehouse_id || '';
+        document.getElementById('edit_pr_needed_by').value = pr.needed_by_date ? pr.needed_by_date.substring(0, 10) : '';
+        document.getElementById('edit_pr_purpose').value = pr.purpose || '';
+        document.getElementById('edit_pr_remarks').value = pr.remarks || '';
+
+        document.getElementById('editPRRowsContainer').innerHTML = '';
+        editPRRowIdx = 0;
+
+        if (pr.items && pr.items.length > 0) {
+            pr.items.forEach(item => renderEditPRRow(item));
+        } else {
+            addEditPRRow();
+        }
+
+        calculateEditPRTotal();
+    } catch (e) {
+        showToast('error', 'Error', 'Failed to load PR details: ' + e.message);
+        closeModal('editPRModal');
+    }
+}
+
+function renderEditPRRow(item = null) {
+    const idx = editPRRowIdx++;
+    const tr = document.createElement('tr');
+    tr.id = `edit_pr_row_${idx}`;
+
+    const prodId = item ? item.product_id : (productsData[0]?.id || '');
+    const suppId = item ? item.supplier_id : '';
+    const unitName = item ? item.unit_name : 'kg';
+    const convFactor = item ? item.conversion_factor : 1;
+    const qty = item ? parseFloat(item.quantity) : 1;
+    const cost = item ? parseFloat(item.estimated_unit_cost) : 0;
+    const itemId = item ? item.id : '';
+    const remarks = item ? (item.remarks || '') : '';
+
+    tr.innerHTML = `
+        <td style="padding: 8px 10px;">
+            <select name="items[${idx}][product_id]" id="edit_pr_prod_${idx}" class="form-select form-select-sm" onchange="onEditPRProductChange(${idx})" required>
+                ${productsData.map(p => `<option value="${p.id}" ${p.id == prodId ? 'selected' : ''}>${p.sku} - ${p.name}</option>`).join('')}
+            </select>
+            <input type="hidden" name="items[${idx}][id]" value="${itemId}">
+            <input type="hidden" name="items[${idx}][conversion_factor]" id="edit_pr_conv_${idx}" value="${convFactor}">
+            <input type="text" name="items[${idx}][remarks]" class="form-control form-control-sm mt-1" placeholder="Item note..." value="${remarks}" style="font-size: 0.72rem;">
+        </td>
+        <td style="padding: 8px 10px;">
+            <select name="items[${idx}][supplier_id]" id="edit_pr_supp_${idx}" class="form-select form-select-sm" required>
+                <option value="">-- Select Supplier --</option>
+                ${suppliersData.map(s => `<option value="${s.id}" ${s.id == suppId ? 'selected' : ''}>${s.name}</option>`).join('')}
+            </select>
+        </td>
+        <td style="padding: 8px 10px;">
+            <input type="text" name="items[${idx}][unit_name]" id="edit_pr_unit_${idx}" class="form-control form-control-sm" value="${unitName}" required>
+        </td>
+        <td style="padding: 8px 10px;">
+            <input type="number" name="items[${idx}][quantity]" id="edit_pr_qty_${idx}" class="form-control form-control-sm text-center" value="${qty}" min="0.01" step="any" oninput="calculateEditPRRow(${idx})" required>
+        </td>
+        <td style="padding: 8px 10px;">
+            <input type="number" name="items[${idx}][estimated_unit_cost]" id="edit_pr_cost_${idx}" class="form-control form-control-sm text-end" value="${cost.toFixed(2)}" min="0" step="0.01" oninput="calculateEditPRRow(${idx})" required>
+        </td>
+        <td style="padding: 8px 10px;">
+            <strong class="d-block text-end" id="edit_pr_subtotal_${idx}">₱0.00</strong>
+        </td>
+        <td style="padding: 8px 10px; text-align: center;">
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('edit_pr_row_${idx}').remove(); calculateEditPRTotal();">
+                <i class="bi bi-trash"></i>
+            </button>
+        </td>
+    `;
+    document.getElementById('editPRRowsContainer').appendChild(tr);
+    calculateEditPRRow(idx);
+}
+
+function addEditPRRow() {
+    renderEditPRRow(null);
+}
+
+function onEditPRProductChange(idx) {
+    const prodId = document.getElementById(`edit_pr_prod_${idx}`)?.value;
+    const prod = productsData.find(p => p.id == prodId);
+    if (!prod) return;
+
+    if (prod.base_unit) {
+        document.getElementById(`edit_pr_unit_${idx}`).value = prod.base_unit;
+    }
+    if (prod.suppliers && prod.suppliers.length > 0) {
+        document.getElementById(`edit_pr_supp_${idx}`).value = prod.suppliers[0].id;
+    }
+}
+
+function calculateEditPRRow(idx) {
+    const qty = parseFloat(document.getElementById(`edit_pr_qty_${idx}`)?.value || 0);
+    const cost = parseFloat(document.getElementById(`edit_pr_cost_${idx}`)?.value || 0);
+    const subtotal = qty * cost;
+    const display = document.getElementById(`edit_pr_subtotal_${idx}`);
+    if (display) {
+        display.innerText = '₱' + subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        display.setAttribute('data-val', subtotal);
+    }
+    calculateEditPRTotal();
+}
+
+function calculateEditPRTotal() {
+    let total = 0;
+    document.querySelectorAll('[id^="edit_pr_subtotal_"]').forEach(el => {
+        total += parseFloat(el.getAttribute('data-val') || 0);
+    });
+    document.getElementById('editPRTotalDisplay').innerText = '₱' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function submitEditPR(e) {
+    e.preventDefault();
+    const id = document.getElementById('editPRId').value;
+    const btn = document.getElementById('editPRSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving & Resubmitting...';
+
+    const form = document.getElementById('editPRForm');
+    const formData = new FormData(form);
+
+    try {
+        const res = await fetch(`/staff/purchase-requests/${id}`, {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            },
+            body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeModal('editPRModal');
+            showToast('success', 'Updated Successfully', data.message);
+            setTimeout(() => location.reload(), 600);
+        } else {
+            showToast('error', 'Update Error', data.message || 'Error updating PR.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send-check me-1"></i> Save & Resubmit to Admin';
+        }
+    } catch (err) {
+        showToast('error', 'Error', err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send-check me-1"></i> Save & Resubmit to Admin';
     }
 }
 </script>

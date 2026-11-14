@@ -117,6 +117,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::get('/purchase-requests', [AdminPurchaseRequestController::class, 'index'])->name('purchase-requests.index');
     Route::post('/purchase-requests', [AdminPurchaseRequestController::class, 'store'])->name('purchase-requests.store');
     Route::get('/purchase-requests/{purchaseRequest}', [AdminPurchaseRequestController::class, 'show'])->name('purchase-requests.show');
+    Route::put('/purchase-requests/{purchaseRequest}', [AdminPurchaseRequestController::class, 'update'])->name('purchase-requests.update');
     Route::post('/purchase-requests/{purchaseRequest}/review', [AdminPurchaseRequestController::class, 'review'])->name('purchase-requests.review');
     Route::post('/purchase-requests/{purchaseRequest}/convert-to-pos', [AdminPurchaseRequestController::class, 'convertToPOs'])->name('purchase-requests.convert-to-pos');
 
@@ -207,6 +208,7 @@ Route::middleware(['auth', 'role:purchasing,admin'])->prefix('staff')->name('sta
     Route::get('/purchase-requests', [StaffPurchaseRequestController::class, 'index'])->name('purchase-requests.index');
     Route::post('/purchase-requests', [StaffPurchaseRequestController::class, 'store'])->name('purchase-requests.store');
     Route::get('/purchase-requests/{purchaseRequest}', [StaffPurchaseRequestController::class, 'show'])->name('purchase-requests.show');
+    Route::put('/purchase-requests/{purchaseRequest}', [StaffPurchaseRequestController::class, 'update'])->name('purchase-requests.update');
     Route::post('/purchase-requests/{purchaseRequest}/resubmit', [StaffPurchaseRequestController::class, 'resubmit'])->name('purchase-requests.resubmit');
 
     // Purchase Orders
